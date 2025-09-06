@@ -17,26 +17,19 @@ git clone https://github.com/godotengine/godot.git --depth 1 -b "$godotVersion-$
 
 godotRoot="$scriptDir/godot-$godotVersion"
 
-#exit
-
 echo "Fetching swappy-frame-pacing..."
-
 ./fetch-gh-release-asset.sh \
   -r godotengine/godot-swappy \
   -v tags/from-source-2025-01-31 \
   -f godot-swappy.7z \
   -t swappy/godot-swappy.7z
-
 7za x -y swappy/godot-swappy.7z -o"$godotRoot/thirdparty/swappy-frame-pacing"
-
 
 echo "Replacing Android asset directory access code..."
 cp "$scriptDir/AssetsDirectoryAccess.kt" \
   "${godotRoot}/platform/android/java/lib/src/org/godotengine/godot/io/directory/AssetsDirectoryAccess.kt"
-
 cp "$scriptDir/AssetData.kt" \
   "$godotRoot/platform/android/java/lib/src/org/godotengine/godot/io/file/AssetData.kt"
-
 cp "$scriptDir/file_access_android.cpp" \
   "$godotRoot/platform/android/file_access_android.cpp"
 cp "$scriptDir/file_access_android.h" \
