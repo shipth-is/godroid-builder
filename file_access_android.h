@@ -1,32 +1,6 @@
 /**************************************************************************/
 /*  file_access_android.h                                                 */
 /**************************************************************************/
-/*                         This file is part of:                          */
-/*                             GODOT ENGINE                               */
-/*                        https://godotengine.org                         */
-/**************************************************************************/
-/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
-/*                                                                        */
-/* Permission is hereby granted, free of charge, to any person obtaining  */
-/* a copy of this software and associated documentation files (the        */
-/* "Software"), to deal in the Software without restriction, including    */
-/* without limitation the rights to use, copy, modify, merge, publish,    */
-/* distribute, sublicense, and/or sell copies of the Software, and to     */
-/* permit persons to whom the Software is furnished to do so, subject to  */
-/* the following conditions:                                              */
-/*                                                                        */
-/* The above copyright notice and this permission notice shall be         */
-/* included in all copies or substantial portions of the Software.        */
-/*                                                                        */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
-/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
-/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
-/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
-/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
-/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
-/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
-/**************************************************************************/
 
 #ifndef FILE_ACCESS_ANDROID_H
 #define FILE_ACCESS_ANDROID_H
@@ -39,12 +13,17 @@
 #include <stdio.h>
 
 class FileAccessAndroid : public FileAccess {
+	// Stays static: shared config value (where extracted content lives).
 	static String extracted_assets_path;
-	static FILE* file_handle;
 
+	// Make the handle per-instance (NOT static).
+	FILE *file_handle = nullptr;
+
+	// These are mutated by reads, so keep them mutable if get_buffer() is const.
 	mutable uint64_t len = 0;
 	mutable uint64_t pos = 0;
 	mutable bool eof = false;
+
 	String absolute_path;
 	String path_src;
 
@@ -52,21 +31,23 @@ class FileAccessAndroid : public FileAccess {
 
 public:
 	virtual Error open_internal(const String &p_path, int p_mode_flags) override; // open a file
-	virtual bool is_open() const override; // true when file is open
+	virtual bool is_open() const override;                                        // true when file is open
 
 	/// returns the path for the current open file
 	virtual String get_path() const override;
 	/// returns the absolute path for the current open file
 	virtual String get_path_absolute() const override;
 
-	virtual void seek(uint64_t p_position) override; // seek to a given position
-	virtual void seek_end(int64_t p_position = 0) override; // seek from the end of file
-	virtual uint64_t get_position() const override; // get position in the file
-	virtual uint64_t get_length() const override; // get size of the file
+	virtual void seek(uint64_t p_position) override;         // seek to a given position
+	virtual void seek_end(int64_t p_position = 0) override;  // seek from the end of file
+	virtual uint64_t get_position() const override;          // get position in the file
+	virtual uint64_t get_length() const override;            // get size of the file
 
-	virtual bool eof_reached() const override; // reading passed EOF
+	virtual bool eof_reached() const override;               // reading passed EOF
 
 	virtual Error resize(int64_t p_length) override { return ERR_UNAVAILABLE; }
+
+	// Keep const to match base; pos/eof are mutable so we can update them.
 	virtual uint64_t get_buffer(uint8_t *p_dst, uint64_t p_length) const override;
 
 	virtual Error get_error() const override; // get last error
