@@ -1,0 +1,106 @@
+#!/bin/bash
+set -euo pipefail
+
+scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+godotVersion="4.4.1"
+godotRelease="stable"
+pkgSuffix="v${godotVersion//./_}"      # v4_4_1
+jniSuffix="${pkgSuffix//_/_1}"         # v4_14_11   (JNI: "_" -> "_1")
+
+rm -rf "$scriptDir/godot-$godotVersion"
+
+echo "Cloning Godot $godotVersion-$godotRelease..."
+
+cd "$scriptDir"
+git clone https://github.com/godotengine/godot.git --depth 1 -b "$godotVersion-$godotRelease" "godot-$godotVersion"
+
+godotRoot="$scriptDir/godot-$godotVersion"
+
+#exit
+
+echo "Fetching swappy-frame-pacing..."
+
+./fetch-gh-release-asset.sh \
+  -r godotengine/godot-swappy \
+  -v tags/from-source-2025-01-31 \
+  -f godot-swappy.7z \
+  -t swappy/godot-swappy.7z
+
+7za x -y swappy/godot-swappy.7z -o"$godotRoot/thirdparty/swappy-frame-pacing"
+
+
+echo "Replacing Android asset directory access code..."
+cp "$scriptDir/AssetsDirectoryAccess.kt" \
+  "${godotRoot}/platform/android/java/lib/src/org/godotengine/godot/io/directory/AssetsDirectoryAccess.kt"
+
+cp "$scriptDir/AssetData.kt" \
+  "$godotRoot/platform/android/java/lib/src/org/godotengine/godot/io/file/AssetData.kt"
+
+cp "$scriptDir/file_access_android.cpp" \
+  "$godotRoot/platform/android/file_access_android.cpp"
+cp "$scriptDir/file_access_android.h" \
+  "$godotRoot/platform/android/file_access_android.h"
+
+echo "Renaming Java package to include suffix: $pkgSuffix"
+
+javaLib="$godotRoot/platform/android/java/lib/src/org/godotengine"
+oldPkgDir="$javaLib/godot"
+newPkgDir="$javaLib/godot${pkgSuffix}"
+
+echo "==> Moving Java package folder:"
+echo "    $oldPkgDir  ->  $newPkgDir"
+if [[ -d "$oldPkgDir" ]]; then
+  mv "$oldPkgDir" "$newPkgDir"
+fi
+
+cd "$godotRoot"
+
+# Build a list of text/code files to touch (skip build outputs and VCS stuff)
+echo "==> Indexing files to rewrite..."
+mapfile -d '' files < <(
+  find . -type f \
+    \( -name "*.kt" -o -name "*.java" -o -name "*.xml" -o -name "*.gradle" -o -name "*.pro" \
+       -o -name "*.txt" -o -name "*.md" -o -name "*.properties" -o -name "*.cpp" -o -name "*.c" -o -name "*.h" \
+       -o -name "AndroidManifest.xml" \) \
+    -not -path "*/build/*" -not -path "*/.git/*" -not -path "*/.gradle/*" -not -path "*/bin/*" -not -path "*/out/*" \
+    -print0
+)
+
+# 1) Dot-form Java package rename (idempotent; don’t re-rewrite)
+echo "==> Rewriting dot-form package names..."
+printf '%s\0' "${files[@]}" | xargs -0 perl -0777 -pi -e '
+  s/\borg\.godotengine\.godot\b(?!'"${pkgSuffix//_/\\_}"')/org.godotengine.godot'"$pkgSuffix"'/g
+'
+
+# 2) Slash-form path rename (idempotent)
+echo "==> Rewriting slash-form package paths..."
+printf '%s\0' "${files[@]}" | xargs -0 perl -0777 -pi -e '
+  s@org/godotengine/godot(?!'"${pkgSuffix//_/\\_}"')@org/godotengine/godot'"$pkgSuffix"'@g
+'
+
+# 3) JNI symbol prefix rename with correct mangling (_ -> _1)
+#    Restrict to native sources/headers under platform/android
+echo "==> Rewriting JNI symbols with correct mangling..."
+mapfile -d '' native_files < <(
+  find platform/android -type f \( -name "*.c" -o -name "*.cpp" -o -name "*.h" \) -print0
+)
+if ((${#native_files[@]})); then
+  printf '%s\0' "${native_files[@]}" | xargs -0 perl -0777 -pi -e '
+    s/Java_org_godotengine_godot_(?!'"$jniSuffix"'_)/Java_org_godotengine_godot'"$jniSuffix"'_/g
+  '
+fi
+
+# Clean & build
+echo "==> scons clean + build (android, template_release, arm64)..."
+scons -c
+scons platform=android target=template_release arch=arm64
+
+echo "==> Gradle: generateGodotTemplates..."
+cd "$godotRoot/platform/android/java/"
+./gradlew --no-daemon generateGodotTemplates
+
+echo "==> Done. Built files in:"
+cd "$godotRoot/bin"
+pwd
+ls -l
