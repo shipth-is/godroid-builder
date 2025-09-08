@@ -47,32 +47,40 @@ fi
 
 cd "$godotRoot"
 
+# Build a list of text/code files to touch (skip build outputs and VCS stuff)
+echo "==> Indexing files to rewrite..."
+mapfile -d '' files < <(
+  find . -type f \
+    \( -name "*.kt" -o -name "*.java" -o -name "*.xml" -o -name "*.gradle" -o -name "*.pro" \
+       -o -name "*.txt" -o -name "*.md" -o -name "*.properties" -o -name "*.cpp" -o -name "*.c" -o -name "*.h" \
+       -o -name "AndroidManifest.xml" \) \
+    -not -path "*/build/*" -not -path "*/.git/*" -not -path "*/.gradle/*" -not -path "*/bin/*" -not -path "*/out/*" \
+    -print0
+)
 
+# 1) Dot-form Java package rename (idempotent; don’t re-rewrite)
+echo "==> Rewriting dot-form package names..."
+printf '%s\0' "${files[@]}" | xargs -0 perl -0777 -pi -e '
+  s/\borg\.godotengine\.godot\b(?!'"${pkgSuffix//_/\\_}"')/org.godotengine.godot'"$pkgSuffix"'/g
+'
 
-# --- dot-form Java package rename ---
-echo "==> Renaming Java package in source files..."
-comby -in-place \
-  'org.godotengine.godot' \
-  "org.godotengine.godot$pkgSuffix" \
-  . \
-  -extensions kt,java,xml,gradle,pro,txt,md,properties,cpp,c,h
+# 2) Slash-form path rename (idempotent)
+echo "==> Rewriting slash-form package paths..."
+printf '%s\0' "${files[@]}" | xargs -0 perl -0777 -pi -e '
+  s@org/godotengine/godot(?!'"${pkgSuffix//_/\\_}"')@org/godotengine/godot'"$pkgSuffix"'@g
+'
 
-# --- slash-form package path rename ---
-echo "==> Renaming package path in source files..."
-comby -in-place \
-  'org/godotengine/godot' \
-  "org/godotengine/godot$pkgSuffix" \
-  . \
-  -extensions kt,java,xml,gradle,pro,txt,md,properties,cpp,c,h
-
-# --- JNI symbol prefix rename (only native code) ---
-echo "==> Renaming JNI symbols in native code..."
-comby -in-place \
-  'Java_org_godotengine_godot_' \
-  "Java_org_godotengine_godot${jniSuffix}_" \
-  platform/android \
-  -extensions c,cpp,h
-
+# 3) JNI symbol prefix rename with correct mangling (_ -> _1)
+#    Restrict to native sources/headers under platform/android
+echo "==> Rewriting JNI symbols with correct mangling..."
+mapfile -d '' native_files < <(
+  find platform/android -type f \( -name "*.c" -o -name "*.cpp" -o -name "*.h" \) -print0
+)
+if ((${#native_files[@]})); then
+  printf '%s\0' "${native_files[@]}" | xargs -0 perl -0777 -pi -e '
+    s/Java_org_godotengine_godot_(?!'"$jniSuffix"'_)/Java_org_godotengine_godot'"$jniSuffix"'_/g
+  '
+fi
 
 # Clean & build
 echo "==> scons clean + build (android, template_release, arm64)..."
