@@ -95,3 +95,7 @@ echo "==> Done. Built files in:"
 cd "$godotRoot/bin"
 pwd
 ls -l
+
+echo "==> AAR ready for Maven publishing:"
+echo "    File: $godotRoot/bin/godot-lib.template_release.aar"
+echo "    To publish: ./gradlew publish"

@@ -18,6 +18,5 @@ This repo creates namespaced versions of godot-lib.template_release.aar with cus
 
 - Asset path - is the value safe for different android setups?
 - Asset path - make configurable
-- Cleanup this repo - replace the GPT code in build-aar.sh and fetch-gh-release-asset.sh
 - Other Godot versions
 - Debug build of AAR
