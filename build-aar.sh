@@ -17,23 +17,21 @@ git clone https://github.com/godotengine/godot.git --depth 1 -b "$godotVersion-$
 
 godotRoot="$scriptDir/godot-$godotVersion"
 
-echo "Fetching swappy-frame-pacing..."
-./fetch-gh-release-asset.sh \
-  -r godotengine/godot-swappy \
-  -v tags/from-source-2025-01-31 \
-  -f godot-swappy.7z \
-  -t swappy/godot-swappy.7z
-7za x -y swappy/godot-swappy.7z -o"$godotRoot/thirdparty/swappy-frame-pacing"
+echo "Downloading swappy-frame-pacing..."
+releaseJson="$(curl -fsSL "https://api.github.com/repos/godotengine/godot-swappy/releases/tags/from-source-2025-01-31")"
+assetId="$(jq -r '.assets[] | select(.name=="godot-swappy.7z").id' <<<"$releaseJson")"
+[ -n "$assetId" ] || { echo "Asset not found"; exit 1; }
 
-echo "Replacing Android asset directory access code..."
-cp "$scriptDir/AssetsDirectoryAccess.kt" \
-  "${godotRoot}/platform/android/java/lib/src/org/godotengine/godot/io/directory/AssetsDirectoryAccess.kt"
-cp "$scriptDir/AssetData.kt" \
-  "$godotRoot/platform/android/java/lib/src/org/godotengine/godot/io/file/AssetData.kt"
-cp "$scriptDir/file_access_android.cpp" \
-  "$godotRoot/platform/android/file_access_android.cpp"
-cp "$scriptDir/file_access_android.h" \
-  "$godotRoot/platform/android/file_access_android.h"
+curl -fSL -H "Accept: application/octet-stream" \
+  -o godot-swappy.7z \
+  "https://api.github.com/repos/godotengine/godot-swappy/releases/assets/$assetId"
+
+7za x -y godot-swappy.7z -o"$godotRoot/thirdparty/swappy-frame-pacing"
+rm godot-swappy.7z
+
+echo "==> Applying overlay..."
+rsync -a --info=stats,name1 "$scriptDir/overlay/" "$godotRoot/"
+
 
 echo "Renaming Java package to include suffix: $pkgSuffix"
 
