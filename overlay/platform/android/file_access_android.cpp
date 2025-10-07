@@ -44,7 +44,7 @@
 #define ELOG(fmt, ...) __android_log_print(ANDROID_LOG_ERROR,   FAA_TAG, fmt, ##__VA_ARGS__)
 
 // Keep this static: it's a shared configuration value, not a handle.
-String FileAccessAndroid::extracted_assets_path = "/data/user/0/com.shipthis.godotdemo/files/assets";
+String FileAccessAndroid::extracted_assets_path = "/data/user/0/com.shipthis.go/files/assets";
 
 String FileAccessAndroid::get_path() const {
 	VLOG("[%p] get_path() -> %s", this, path_src.utf8().get_data());
