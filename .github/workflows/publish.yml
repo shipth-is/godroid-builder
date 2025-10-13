@@ -9,16 +9,47 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version to publish (e.g., 0.0.1)'
+      tagName:
+        description: 'Tag-name to publish - compound version (e.g., v4.4.1-0.0.1)'
         required: true
-        default: '0.0.1'
+        default: 'v4.4.1-0.0.1'
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     
     steps:
+    - name: Extract version from tag or input
+      id: version
+      run: |
+        TAG_NAME="${GITHUB_REF#refs/tags/}"
+
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          TAG_NAME="${{ github.event.inputs.tagName }}"
+        fi
+
+        # Expected format: vX.Y.Z-A.B.C
+        #   - X.Y.Z = Godot version
+        #   - A.B.C = package version
+        if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "Tag name '$TAG_NAME' does not match the required format 'vX.Y.Z-A.B.C'"
+          exit 1
+        fi
+
+        VERSION="${TAG_NAME#v}"                  # remove leading 'v'
+        GODOT_VERSION="${VERSION%%-*}"           # extract before the '-'
+        PACKAGE_VERSION="${VERSION#*-}"          # extract after the '-'
+
+        echo "Full Version: $VERSION"
+        echo "Godot Version: $GODOT_VERSION"
+        echo "Package Version: $PACKAGE_VERSION"
+
+        # Export for later steps
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "godotVersion=$GODOT_VERSION" >> $GITHUB_OUTPUT
+        echo "packageVersion=$PACKAGE_VERSION" >> $GITHUB_OUTPUT
+        echo "dashedGodotVersion=${GODOT_VERSION//./-}" >> $GITHUB_OUTPUT
+
     - name: Checkout code
       uses: actions/checkout@v4
       
@@ -47,30 +78,21 @@ jobs:
     - name: Build AAR
       run: |
         chmod +x build-aar.sh
-        ./build-aar.sh 4.4.1 stable
+        ./build-aar.sh ${ { steps.version.outputs.godotVersion } } stable
         
     - name: Verify AAR exists
       run: |
-        if [ ! -f "godot-4.4.1/bin/godot-lib.template_release.aar" ]; then
+        if [ ! -f "godot-${{ steps.version.outputs.godotVersion }}/bin/godot-lib.template_release.aar" ]; then
           echo "AAR file not found!"
           exit 1
         fi
-        ls -la godot-4.4.1/bin/
-        
-    - name: Extract version from tag or input
-      id: version
-      run: |
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-        else
-          echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-        fi
+        ls -la godot-${{ steps.version.outputs.godotVersion }}/bin/
         
     - name: Publish to GitHub Packages
       env:
         GITHUB_TOKEN: ${{ secrets.PACKAGE_TOKEN }}
       run: |
-        ./gradlew publish -Pversion="${{ steps.version.outputs.version }}"
+        ./gradlew publish -Pversion="${{ steps.version.outputs.packageVersion }}" -PgodotVersion="${{ steps.version.outputs.godotVersion }}"
         
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
@@ -81,7 +103,7 @@ jobs:
         tag_name: ${{ github.ref }}
         release_name: Release ${{ steps.version.outputs.version }}
         body: |
-          ## Godot Android Library 4.4.1 v${{ steps.version.outputs.version }}
+          ## Godot Android Library ${{ steps.version.outputs.godotVersion }} - ${{ steps.version.outputs.packageVersion }}
           
           This release includes the patched Godot Android library with filesystem-based asset access.
           
@@ -102,7 +124,7 @@ jobs:
           }
           
           dependencies {
-              implementation 'shipth.is:godot-lib-v4-4-1:${{ steps.version.outputs.version }}:template-release@aar'
+              implementation 'shipth.is:godot-lib-v:${{ steps.version.outputs.dashedGodotVersion }}:${{ steps.version.outputs.version }}:template-release@aar'
           }
           ```
         draft: false
