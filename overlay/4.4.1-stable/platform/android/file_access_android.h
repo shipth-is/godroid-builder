@@ -39,17 +39,13 @@
 #include <stdio.h>
 
 class FileAccessAndroid : public FileAccess {
-	// Stays static: shared config value (where extracted content lives).
-	static String extracted_assets_path;
 
-	// Make the handle per-instance (NOT static).
+	static String extracted_assets_path;
 	FILE *file_handle = nullptr;
 
-	// These are mutated by reads, so keep them mutable if get_buffer() is const.
 	mutable uint64_t len = 0;
 	mutable uint64_t pos = 0;
 	mutable bool eof = false;
-
 	String absolute_path;
 	String path_src;
 
@@ -57,23 +53,21 @@ class FileAccessAndroid : public FileAccess {
 
 public:
 	virtual Error open_internal(const String &p_path, int p_mode_flags) override; // open a file
-	virtual bool is_open() const override;                                        // true when file is open
+	virtual bool is_open() const override; // true when file is open
 
 	/// returns the path for the current open file
 	virtual String get_path() const override;
 	/// returns the absolute path for the current open file
 	virtual String get_path_absolute() const override;
 
-	virtual void seek(uint64_t p_position) override;         // seek to a given position
-	virtual void seek_end(int64_t p_position = 0) override;  // seek from the end of file
-	virtual uint64_t get_position() const override;          // get position in the file
-	virtual uint64_t get_length() const override;            // get size of the file
+	virtual void seek(uint64_t p_position) override; // seek to a given position
+	virtual void seek_end(int64_t p_position = 0) override; // seek from the end of file
+	virtual uint64_t get_position() const override; // get position in the file
+	virtual uint64_t get_length() const override; // get size of the file
 
-	virtual bool eof_reached() const override;               // reading passed EOF
+	virtual bool eof_reached() const override; // reading passed EOF
 
 	virtual Error resize(int64_t p_length) override { return ERR_UNAVAILABLE; }
-
-	// Keep const to match base; pos/eof are mutable so we can update them.
 	virtual uint64_t get_buffer(uint8_t *p_dst, uint64_t p_length) const override;
 
 	virtual Error get_error() const override; // get last error
