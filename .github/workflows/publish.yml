@@ -124,7 +124,7 @@ jobs:
           }
           
           dependencies {
-              implementation 'shipth.is:godot-lib-v:${{ steps.version.outputs.dashedGodotVersion }}:${{ steps.version.outputs.version }}:template-release@aar'
+              implementation 'shipth.is:godot-lib-v${{ steps.version.outputs.dashedGodotVersion }}:${{ steps.version.outputs.packageVersion }}:template-release@aar'
           }
           ```
         draft: false
