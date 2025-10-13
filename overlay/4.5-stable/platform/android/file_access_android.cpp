@@ -34,9 +34,10 @@
 #include "thread_jandroid.h"
 
 #include <android/asset_manager_jni.h>
+#include <inttypes.h>
 
-AAssetManager *FileAccessAndroid::asset_manager = nullptr;
-jobject FileAccessAndroid::j_asset_manager = nullptr;
+// Path to extracted assets on internal storage.
+String FileAccessAndroid::extracted_assets_path = "/data/user/0/com.shipthis.go/files/assets";
 
 String FileAccessAndroid::get_path() const {
 	return path_src;
@@ -53,17 +54,26 @@ Error FileAccessAndroid::open_internal(const String &p_path, int p_mode_flags) {
 	String path = fix_path(p_path).simplify_path();
 	absolute_path = path;
 	if (path.begins_with("/")) {
-		path = path.substr(1);
+		path = path.substr(1, path.length());
 	} else if (path.begins_with("res://")) {
-		path = path.substr(6);
+		path = path.substr(6, path.length());
 	}
 
-	ERR_FAIL_COND_V(p_mode_flags & FileAccess::WRITE, ERR_UNAVAILABLE); //can't write on android..
-	asset = AAssetManager_open(asset_manager, path.utf8().get_data(), AASSET_MODE_STREAMING);
-	if (!asset) {
+	// Read-only on Android here.
+	ERR_FAIL_COND_V(p_mode_flags & FileAccess::WRITE, ERR_UNAVAILABLE);
+
+	// Use extracted assets path under internal storage.
+	String full_path = extracted_assets_path + "/" + path;
+	file_handle = fopen(full_path.utf8().get_data(), "rb");
+	if (!file_handle) {
 		return ERR_CANT_OPEN;
 	}
-	len = AAsset_getLength(asset);
+	// Determine file size.
+	fseek(file_handle, 0, SEEK_END);
+	len = (uint64_t)ftell(file_handle);
+	fseek(file_handle, 0, SEEK_SET);
+
+	
 	pos = 0;
 	eof = false;
 
@@ -71,21 +81,21 @@ Error FileAccessAndroid::open_internal(const String &p_path, int p_mode_flags) {
 }
 
 void FileAccessAndroid::_close() {
-	if (!asset) {
+	if (!file_handle) {
 		return;
 	}
-	AAsset_close(asset);
-	asset = nullptr;
+	fclose(file_handle);
+	file_handle = nullptr;
 }
 
 bool FileAccessAndroid::is_open() const {
-	return asset != nullptr;
+	const bool open = (file_handle != nullptr);
+	return open;
 }
-
 void FileAccessAndroid::seek(uint64_t p_position) {
-	ERR_FAIL_NULL(asset);
+	ERR_FAIL_NULL(file_handle);
 
-	AAsset_seek(asset, p_position, SEEK_SET);
+	fseek(file_handle, (long)p_position, SEEK_SET);
 	pos = p_position;
 	if (pos > len) {
 		pos = len;
@@ -96,9 +106,14 @@ void FileAccessAndroid::seek(uint64_t p_position) {
 }
 
 void FileAccessAndroid::seek_end(int64_t p_position) {
-	ERR_FAIL_NULL(asset);
-	AAsset_seek(asset, p_position, SEEK_END);
+	ERR_FAIL_NULL(file_handle);
+
+	fseek(file_handle, (long)p_position, SEEK_END);
 	pos = len + p_position;
+	if (pos > len) {
+		pos = len;
+	}
+	eof = (pos >= len);
 }
 
 uint64_t FileAccessAndroid::get_position() const {
@@ -114,30 +129,32 @@ bool FileAccessAndroid::eof_reached() const {
 }
 
 uint64_t FileAccessAndroid::get_buffer(uint8_t *p_dst, uint64_t p_length) const {
-	ERR_FAIL_COND_V(!p_dst && p_length > 0, -1);
+	ERR_FAIL_COND_V(!p_dst && p_length > 0, (uint64_t)-1);
+	ERR_FAIL_NULL_V(file_handle, (uint64_t)0);
 
-	int r = AAsset_read(asset, p_dst, p_length);
+	size_t r = fread(p_dst, 1, (size_t)p_length, file_handle);
 
 	if (pos + p_length > len) {
 		eof = true;
 	}
-
-	if (r >= 0) {
+	if (r > 0) {
 		pos += r;
 		if (pos > len) {
 			pos = len;
 		}
 	}
 
-	return r;
+	return (uint64_t)r;
 }
 
 int64_t FileAccessAndroid::_get_size(const String &p_file) {
+	# TODO: implement this 
 	return AAsset_getLength64(asset);
 }
 
 Error FileAccessAndroid::get_error() const {
-	return eof ? ERR_FILE_EOF : OK; // not sure what else it may happen
+	const Error e = eof ? ERR_FILE_EOF : OK;
+	return e;
 }
 
 void FileAccessAndroid::flush() {
@@ -151,18 +168,18 @@ bool FileAccessAndroid::store_buffer(const uint8_t *p_src, uint64_t p_length) {
 bool FileAccessAndroid::file_exists(const String &p_path) {
 	String path = fix_path(p_path).simplify_path();
 	if (path.begins_with("/")) {
-		path = path.substr(1);
+		path = path.substr(1, path.length());
 	} else if (path.begins_with("res://")) {
-		path = path.substr(6);
+		path = path.substr(6, path.length());
 	}
 
-	AAsset *at = AAssetManager_open(asset_manager, path.utf8().get_data(), AASSET_MODE_STREAMING);
-
-	if (!at) {
+	String full_path = extracted_assets_path + "/" + path;
+	FILE *test_file = fopen(full_path.utf8().get_data(), "rb");
+	if (!test_file) {
 		return false;
 	}
+	fclose(test_file);
 
-	AAsset_close(at);
 	return true;
 }
 
@@ -175,14 +192,9 @@ FileAccessAndroid::~FileAccessAndroid() {
 }
 
 void FileAccessAndroid::setup(jobject p_asset_manager) {
-	JNIEnv *env = get_jni_env();
-	j_asset_manager = env->NewGlobalRef(p_asset_manager);
-	asset_manager = AAssetManager_fromJava(env, j_asset_manager);
+	// No setup needed.
 }
 
 void FileAccessAndroid::terminate() {
-	JNIEnv *env = get_jni_env();
-	ERR_FAIL_NULL(env);
-
-	env->DeleteGlobalRef(j_asset_manager);
+	// No termination needed.
 }

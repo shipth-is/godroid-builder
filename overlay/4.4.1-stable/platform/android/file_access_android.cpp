@@ -55,7 +55,6 @@ Error FileAccessAndroid::open_internal(const String &p_path, int p_mode_flags) {
 	path_src = p_path;
 	String path = fix_path(p_path).simplify_path();
 	absolute_path = path;
-
 	if (path.begins_with("/")) {
 		path = path.substr(1, path.length());
 	} else if (path.begins_with("res://")) {
@@ -71,12 +70,12 @@ Error FileAccessAndroid::open_internal(const String &p_path, int p_mode_flags) {
 	if (!file_handle) {
 		return ERR_CANT_OPEN;
 	}
-
 	// Determine file size.
 	fseek(file_handle, 0, SEEK_END);
 	len = (uint64_t)ftell(file_handle);
 	fseek(file_handle, 0, SEEK_SET);
 
+	
 	pos = 0;
 	eof = false;
 
@@ -95,7 +94,6 @@ bool FileAccessAndroid::is_open() const {
 	const bool open = (file_handle != nullptr);
 	return open;
 }
-
 void FileAccessAndroid::seek(uint64_t p_position) {
 	ERR_FAIL_NULL(file_handle);
 
@@ -107,7 +105,6 @@ void FileAccessAndroid::seek(uint64_t p_position) {
 	} else {
 		eof = false;
 	}
-
 }
 
 void FileAccessAndroid::seek_end(int64_t p_position) {
@@ -119,7 +116,6 @@ void FileAccessAndroid::seek_end(int64_t p_position) {
 		pos = len;
 	}
 	eof = (pos >= len);
-
 }
 
 uint64_t FileAccessAndroid::get_position() const {
@@ -168,7 +164,6 @@ bool FileAccessAndroid::store_buffer(const uint8_t *p_src, uint64_t p_length) {
 
 bool FileAccessAndroid::file_exists(const String &p_path) {
 	String path = fix_path(p_path).simplify_path();
-
 	if (path.begins_with("/")) {
 		path = path.substr(1, path.length());
 	} else if (path.begins_with("res://")) {
