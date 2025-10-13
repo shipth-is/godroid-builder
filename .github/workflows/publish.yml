@@ -78,7 +78,7 @@ jobs:
     - name: Build AAR
       run: |
         chmod +x build-aar.sh
-        ./build-aar.sh ${ { steps.version.outputs.godotVersion } } stable
+        ./build-aar.sh "${{ steps.version.outputs.godotVersion }}" stable
         
     - name: Verify AAR exists
       run: |
