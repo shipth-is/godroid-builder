@@ -96,10 +96,6 @@ echo "==> scons clean + build (android, template_release, arm64)..."
 scons -c
 scons platform=android target=template_release arch=arm64
 
-echo "==> Gradle: generateGodotTemplates..."
-cd "$godotRoot/platform/android/java/"
-./gradlew --no-daemon generateGodotTemplates
-
 echo "==> Done. Built files in:"
 cd "$godotRoot/bin"
 pwd
@@ -107,4 +103,4 @@ ls -l
 
 echo "==> AAR ready for Maven publishing:"
 echo "    File: $godotRoot/bin/godot-lib.template_release.aar"
-echo "    To publish: ./gradlew publish"
+echo "    To publish: ./gradlew publish -Pversion=${version} -PgodotVersion=${godotVersion}"

@@ -20,3 +20,14 @@ This repo creates namespaced versions of godot-lib.template_release.aar with cus
 - Asset path - make configurable
 - Other Godot versions
 - Debug build of AAR
+
+
+```bash
+sudo apt-get update
+sudo apt-get install -y --no-install-recommends \
+  p7zip-full rsync curl jq build-essential pkg-config libx11-dev libxcursor-dev \
+  libxinerama-dev libgl1-mesa-dev libglu-dev libasound2-dev libpulse-dev libdbus-1-dev \
+  libudev-dev libxi-dev libxrandr-dev yasm xvfb wget unzip libspeechd-dev speech-dispatcher \
+  python3 python3-pip
+pip3 install --user --break-system-packages scons
+```
