@@ -1,5 +1,8 @@
 name: Publish to GitHub Packages
 
+permissions:
+  contents: write
+
 on:
   push:
     tags:
@@ -44,7 +47,7 @@ jobs:
     - name: Build AAR
       run: |
         chmod +x build-aar.sh
-        ./build-aar.sh
+        ./build-aar.sh 4.4.1 stable
         
     - name: Verify AAR exists
       run: |
@@ -63,17 +66,11 @@ jobs:
           echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
         fi
         
-    - name: Update version in build.gradle.kts
-      run: |
-        VERSION="${{ steps.version.outputs.version }}"
-        sed -i "s/version = \".*\"/version = \"$VERSION\"/" build.gradle.kts
-        echo "Updated version to: $VERSION"
-        
     - name: Publish to GitHub Packages
       env:
         GITHUB_TOKEN: ${{ secrets.PACKAGE_TOKEN }}
       run: |
-        ./gradlew publish
+        ./gradlew publish -Pversion="${{ steps.version.outputs.version }}"
         
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')

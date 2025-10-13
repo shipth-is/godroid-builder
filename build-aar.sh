@@ -3,8 +3,15 @@ set -euo pipefail
 
 scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-godotVersion="4.4.1"
-godotRelease="stable"
+# Take the godotVersion and godotRelease from the command line, show usage if not provided
+if [ $# -eq 2 ]; then
+  godotVersion="$1"
+  godotRelease="$2" # e.g. "stable" or "rc1"
+else
+  echo "Usage: $0 <godotVersion> <godotRelease>"
+  exit 1
+fi
+
 pkgSuffix="v${godotVersion//./_}"      # v4_4_1
 jniSuffix="${pkgSuffix//_/_1}"         # v4_14_11   (JNI: "_" -> "_1")
 
@@ -29,9 +36,11 @@ curl -fSL -H "Accept: application/octet-stream" \
 7za x -y godot-swappy.7z -o"$godotRoot/thirdparty/swappy-frame-pacing"
 rm godot-swappy.7z
 
-echo "==> Applying overlay..."
-rsync -a --info=stats,name1 "$scriptDir/overlay/" "$godotRoot/"
+overlayDir="$scriptDir/overlay/$godotVersion-$godotRelease"
+[ -d "$overlayDir" ] || { echo "Overlay directory not found"; exit 1; }
 
+echo "==> Applying overlay directory $overlayDir ..."
+rsync -a --info=stats,name1 "$overlayDir/" "$godotRoot/"
 
 echo "Renaming Java package to include suffix: $pkgSuffix"
 

@@ -4,14 +4,17 @@ plugins {
 }
 
 group = "shipth.is"
-version = "0.0.1"
+// Accept version as a parameter, default to 0.0.1 if not provided
+version = project.findProperty("version") as String? ?: "0.0.1"
 
-val aarFile = file("godot-4.4.1/bin/godot-lib.template_release.aar")
+// Accept godot version as a parameter, default to 4.4.1 if not provided
+val godotVersion = project.findProperty("godotVersion") as String? ?: "4.4.1"
+val aarFile = file("godot-${godotVersion}/bin/godot-lib.template_release.aar")
 
 publishing {
     publications {
         create<MavenPublication>("godotLib") {
-            artifactId = "godot-lib-v4-4-1"
+            artifactId = "godot-lib-v${godotVersion.replace(".", "-")}"
             
             // Add the AAR file as an artifact
             artifact(aarFile) {
