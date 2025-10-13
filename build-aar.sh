@@ -103,4 +103,4 @@ ls -l
 
 echo "==> AAR ready for Maven publishing:"
 echo "    File: $godotRoot/bin/godot-lib.template_release.aar"
-echo "    To publish: ./gradlew publish -Pversion=${version} -PgodotVersion=${godotVersion}"
+echo "    To publish: ./gradlew publish -PgodotVersion=${godotVersion}"
