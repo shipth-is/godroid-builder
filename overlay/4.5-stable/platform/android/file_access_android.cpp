@@ -148,8 +148,23 @@ uint64_t FileAccessAndroid::get_buffer(uint8_t *p_dst, uint64_t p_length) const 
 }
 
 int64_t FileAccessAndroid::_get_size(const String &p_file) {
-	# TODO: implement this 
-	return AAsset_getLength64(asset);
+	String path = fix_path(p_file).simplify_path();
+	if (path.begins_with("/")) {
+		path = path.substr(1, path.length());
+	} else if (path.begins_with("res://")) {
+		path = path.substr(6, path.length());
+	}
+
+	String full_path = extracted_assets_path + "/" + path;
+	FILE *test_file = fopen(full_path.utf8().get_data(), "rb");
+	if (!test_file) {
+		return -1;
+	}
+	fseek(test_file, 0, SEEK_END);
+	int64_t size = (int64_t)ftell(test_file);
+	fclose(test_file);
+
+	return size;
 }
 
 Error FileAccessAndroid::get_error() const {
