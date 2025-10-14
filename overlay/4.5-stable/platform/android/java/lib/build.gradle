@@ -84,6 +84,9 @@ android {
             res.srcDirs = ['res']
             aidl.srcDirs = ['aidl']
             assets.srcDirs = ['assets']
+            java {
+                exclude 'com/google/android/vending/**'
+            }
         }
 
         debug.jniLibs.srcDirs = ['libs/debug']
