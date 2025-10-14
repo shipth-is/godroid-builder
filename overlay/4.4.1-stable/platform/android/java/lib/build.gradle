@@ -83,6 +83,9 @@ android {
             java {
                 exclude 'com/google/android/vending/**'
             }
+            aidl {
+                exclude '**/*.aidl'
+            }
         }
 
         debug.jniLibs.srcDirs = ['libs/debug']
