@@ -42,6 +42,10 @@ overlayDir="$scriptDir/overlay/$godotVersion-$godotRelease"
 echo "==> Applying overlay directory $overlayDir ..."
 rsync -a --info=stats,name1 "$overlayDir/" "$godotRoot/"
 
+# Remove all aidl files
+echo "==> Removing all .aidl files..."
+find "$godotRoot/platform/android/java/" -type f -name "*.aidl" -exec rm -f {} +
+
 echo "Renaming Java package to include suffix: $pkgSuffix"
 
 javaLib="$godotRoot/platform/android/java/lib/src/org/godotengine"
