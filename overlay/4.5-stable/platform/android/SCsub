@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import os
 from misc.utility.scons_hints import *
 
 import platform
@@ -101,9 +102,8 @@ if lib_arch_dir != "" and host_subpath != "":
     out_dir = jni_libs_dir + lib_arch_dir
 
     # Allow version-specific library names (so multiple Godot AARs can coexist)
-    version_suffix = env.get("GODOT_VERSION", "")
+    version_suffix = os.environ.get("VERSION_SUFFIX", "")
     lib_filename = f"libgodot_android{('_' + version_suffix) if version_suffix else ''}.so"
-
     env_android.CommandNoCache(out_dir + "/" + lib_filename, lib, Move("$TARGET", "$SOURCE"))
 
     stl_lib_path = f"{env['ANDROID_NDK_ROOT']}/toolchains/llvm/prebuilt/{host_subpath}/sysroot/usr/lib/{triple_target_dir}/libc++_shared.so"

@@ -226,7 +226,8 @@ def configure(env: "SConsEnvironment"):
     # Link flags
 
     env.Append(LINKFLAGS=["-Wl,--gc-sections", "-Wl,--no-undefined", "-Wl,-z,now"])
-    version_suffix = env.get("GODOT_VERSION", "")
+    # Set SONAME dynamically if VERSION_SUFFIX is provided (for multi-version coexistence)
+    version_suffix = os.environ.get("VERSION_SUFFIX", "")
     if version_suffix:
         env.Append(LINKFLAGS=[f"-Wl,-soname,libgodot_android_{version_suffix}.so"])
     else:
