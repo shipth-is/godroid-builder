@@ -3,24 +3,33 @@ set -euo pipefail
 
 scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Take the godotVersion and godotRelease from the command line, show usage if not provided
+# Usage: ./build-aar.sh <version> [release]
+# Examples:
+#   ./build-aar.sh 4.5 stable
+#   ./build-aar.sh 3.x
+#   ./build-aar.sh master
 if [ $# -eq 2 ]; then
   godotVersion="$1"
-  godotRelease="$2" # e.g. "stable" or "rc1"
+  godotRelease="$2"
+  refName="${godotVersion}-${godotRelease}"   # e.g. 4.5-stable or 4.4-rc1
+elif [ $# -eq 1 ]; then
+  godotVersion="$1"
+  godotRelease=""                             # no release name
+  refName="$godotVersion"                     # e.g. 3.x or master
 else
-  echo "Usage: $0 <godotVersion> <godotRelease>"
+  echo "Usage: $0 <godotVersion> [godotRelease]"
   exit 1
 fi
 
-pkgSuffix="v${godotVersion//./_}"      # v4_4_1
+pkgSuffix="v${godotVersion//./_}"      # v4_4_1 or v3_x
 jniSuffix="${pkgSuffix//_/_1}"         # v4_14_11   (JNI: "_" -> "_1")
 
 rm -rf "$scriptDir/godot-$godotVersion"
 
-echo "Cloning Godot $godotVersion-$godotRelease..."
+echo "Cloning Godot from ref '$refName'..."
 
 cd "$scriptDir"
-git clone https://github.com/godotengine/godot.git --depth 1 -b "$godotVersion-$godotRelease" "godot-$godotVersion"
+git clone https://github.com/godotengine/godot.git --depth 1 -b "$refName" "godot-$godotVersion"
 
 godotRoot="$scriptDir/godot-$godotVersion"
 
@@ -36,7 +45,11 @@ curl -fSL -H "Accept: application/octet-stream" \
 7za x -y godot-swappy.7z -o"$godotRoot/thirdparty/swappy-frame-pacing"
 rm godot-swappy.7z
 
-overlayDir="$scriptDir/overlay/$godotVersion-$godotRelease"
+if [ -n "${godotRelease:-}" ]; then
+  overlayDir="$scriptDir/overlay/${godotVersion}-${godotRelease}"
+else
+  overlayDir="$scriptDir/overlay/${godotVersion}"
+fi
 [ -d "$overlayDir" ] || { echo "Overlay directory not found"; exit 1; }
 
 echo "==> Applying overlay directory $overlayDir ..."
@@ -99,7 +112,13 @@ fi
 echo "==> scons clean + build (android, template_release, arm64)..."
 scons -c
 export VERSION_SUFFIX="${pkgSuffix}"
-scons platform=android target=template_release arch=arm64
+
+if [[ "$godotVersion" == 3.* ]]; then
+  scons platform=android target=release arch=arm64
+
+else
+  scons platform=android target=template_release arch=arm64
+fi
 
 echo "==> Gradle: generateGodotTemplates..."
 cd "$godotRoot/platform/android/java/"
