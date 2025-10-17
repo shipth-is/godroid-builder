@@ -3,21 +3,35 @@ set -euo pipefail
 
 scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Usage: ./build-aar.sh <version> [release]
-# Examples:
-#   ./build-aar.sh 4.5 stable
-#   ./build-aar.sh 3.x
-#   ./build-aar.sh master
+downloadOnly=false
+
+# --- Parse flags first ---
+args=()
+for arg in "$@"; do
+  case "$arg" in
+    --downloadOnly)
+      downloadOnly=true
+      ;;
+    *)
+      args+=("$arg")
+      ;;
+  esac
+done
+
+set -- "${args[@]}"
+
+# --- Parse positional arguments ---
+# Usage: ./build-aar.sh <version> [release] [--downloadOnly]
 if [ $# -eq 2 ]; then
   godotVersion="$1"
   godotRelease="$2"
   refName="${godotVersion}-${godotRelease}"   # e.g. 4.5-stable or 4.4-rc1
 elif [ $# -eq 1 ]; then
   godotVersion="$1"
-  godotRelease=""                             # no release name
+  godotRelease=""
   refName="$godotVersion"                     # e.g. 3.x or master
 else
-  echo "Usage: $0 <godotVersion> [godotRelease]"
+  echo "Usage: $0 <godotVersion> [godotRelease] [--downloadOnly]"
   exit 1
 fi
 
@@ -30,6 +44,11 @@ echo "Cloning Godot from ref '$refName'..."
 
 cd "$scriptDir"
 git clone https://github.com/godotengine/godot.git --depth 1 -b "$refName" "godot-$godotVersion"
+
+if [ "$downloadOnly" = true ]; then
+  echo "Clone completed successfully. Exiting (--downloadOnly set)."
+  exit 0
+fi
 
 godotRoot="$scriptDir/godot-$godotVersion"
 
@@ -123,6 +142,11 @@ fi
 echo "==> Gradle: generateGodotTemplates..."
 cd "$godotRoot/platform/android/java/"
 ./gradlew --no-daemon generateGodotTemplates
+
+if [[ "$godotVersion" == 3.* ]]; then
+  echo "==> Renaming AAR for Godot 3.x..."
+  mv "$godotRoot/bin/godot-lib.release.aar" "$godotRoot/bin/godot-lib.template_release.aar"
+fi
 
 echo "==> Done. Built files in:"
 cd "$godotRoot/bin"
