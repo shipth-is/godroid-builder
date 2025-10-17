@@ -82,7 +82,12 @@ jobs:
     - name: Build AAR
       run: |
         chmod +x build-aar.sh
-        ./build-aar.sh "${{ steps.version.outputs.godotVersion }}" stable
+        if [[ "${{ steps.version.outputs.godotVersion }}" == "3.x" ]]; then
+          ./build-aar.sh "${{ steps.version.outputs.godotVersion }}"
+        else
+          ./build-aar.sh "${{ steps.version.outputs.godotVersion }}" stable
+        fi
+
         
     - name: Verify AAR exists
       run: |
