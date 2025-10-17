@@ -29,12 +29,13 @@ jobs:
         fi
 
         # Expected formats:
-        #   vX.Y.Z-A.B.C  (e.g., v4.4.1-0.0.9)
-        #   vX.Y-A.B.C    (e.g., v4.5-0.0.9)
-        # X.Y(.Z) = Godot version
-        # A.B.C   = package version
-        if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+(\.[0-9]+)?-[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "Tag name '$TAG_NAME' does not match required formats 'vX.Y.Z-A.B.C' or 'vX.Y-A.B.C'"
+        #   vX.Y.Z-A.B.C   (e.g., v4.4.1-0.0.9)
+        #   vX.Y-A.B.C     (e.g., v4.5-0.0.9)
+        #   v3.x-A.B.C     (e.g., v3.x-0.0.16)
+        # X.Y(.Z|.x) = Godot version
+        # A.B.C      = package version
+        if [[ ! "$TAG_NAME" =~ ^v[0-9]+(\.[0-9]+|\.x)(\.[0-9]+)?-[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "Tag name '$TAG_NAME' does not match required formats: vX.Y.Z-A.B.C, vX.Y-A.B.C, or v3.x-A.B.C"
           exit 1
         fi
 
