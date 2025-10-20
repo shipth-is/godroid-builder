@@ -133,8 +133,8 @@ scons -c
 export VERSION_SUFFIX="${pkgSuffix}"
 
 if [[ "$godotVersion" == 3.* ]]; then
-  scons platform=android target=release arch=arm64
-
+  scons platform=android target=release android_arch=armv7
+  scons platform=android target=release android_arch=arm64v8
 else
   scons platform=android target=template_release arch=arm64
 fi
