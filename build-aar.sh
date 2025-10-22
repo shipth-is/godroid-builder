@@ -136,7 +136,8 @@ if [[ "$godotVersion" == 3.* ]]; then
   scons platform=android target=release android_arch=armv7
   scons platform=android target=release android_arch=arm64v8
 else
-  scons platform=android target=template_release arch=arm64
+  scons platform=android target=template_release arch=arm32
+  scons platform=android target=template_release arch=arm64 generate_android_binaries=yes
 fi
 
 echo "==> Gradle: generateGodotTemplates..."
