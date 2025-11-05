@@ -29,7 +29,7 @@ android {
         manifestPlaceholders = [godotLibraryVersion: getGodotLibraryVersionName()]
     }
 
-    namespace = "org.godotengine.godotv4_4_1"
+    namespace = "org.godotengine.godot"
 
     compileOptions {
         sourceCompatibility versions.javaVersion

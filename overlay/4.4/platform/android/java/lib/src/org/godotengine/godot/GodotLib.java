@@ -49,7 +49,7 @@ import javax.microedition.khronos.opengles.GL10;
  */
 public class GodotLib {
 	static {
-		System.loadLibrary("godot_android_v4_4_1");
+		System.loadLibrary("godot_android_v4_4");
 	}
 
 	/**
