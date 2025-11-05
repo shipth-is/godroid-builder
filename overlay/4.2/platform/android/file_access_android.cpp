@@ -40,6 +40,7 @@
 
 // Path to extracted assets on internal storage.
 String FileAccessAndroid::extracted_assets_path = "/data/user/0/com.shipthis.go/files/assets";
+AAssetManager *FileAccessAndroid::asset_manager = nullptr;
 
 String FileAccessAndroid::get_path() const {
 	return path_src;
