@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+import os
 import subprocess
 import sys
 
@@ -74,8 +74,14 @@ if lib_arch_dir != "":
         lib_tools_dir = ""
 
     out_dir = "#platform/android/java/lib/libs/" + lib_tools_dir + lib_type_dir + "/" + lib_arch_dir
+    # Allow version-specific library names (e.g. libgodot_android_v4_4_1.so)
+    version_suffix = os.environ.get("VERSION_SUFFIX", "")
+    lib_filename = f"libgodot_android{('_' + version_suffix) if version_suffix else ''}.so"
+
     env_android.Command(
-        out_dir + "/libgodot_android.so", "#bin/libgodot" + env["SHLIBSUFFIX"], Move("$TARGET", "$SOURCE")
+        out_dir + "/" + lib_filename,
+        "#bin/libgodot" + env["SHLIBSUFFIX"],
+        Move("$TARGET", "$SOURCE"),
     )
 
     stl_lib_path = (
