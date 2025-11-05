@@ -36,9 +36,7 @@ import org.godotengine.godot.utils.BenchmarkUtils;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.content.res.Configuration;
 import android.os.Bundle;
-import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -104,13 +102,6 @@ public class GodotFragment extends Fragment implements GodotHost {
 
 	@CallSuper
 	@Override
-	public void onConfigurationChanged(Configuration newConfig) {
-		super.onConfigurationChanged(newConfig);
-		godot.onConfigurationChanged(newConfig);
-	}
-
-	@CallSuper
-	@Override
 	public void onActivityResult(int requestCode, int resultCode, Intent data) {
 		super.onActivityResult(requestCode, resultCode, data);
 		if (resultCallback != null) {
@@ -130,40 +121,29 @@ public class GodotFragment extends Fragment implements GodotHost {
 
 	@Override
 	public void onCreate(Bundle icicle) {
-		BenchmarkUtils.beginBenchmarkMeasure("Startup", "GodotFragment::onCreate");
+		BenchmarkUtils.beginBenchmarkMeasure("GodotFragment::onCreate");
 		super.onCreate(icicle);
 
 		final Activity activity = getActivity();
 		mCurrentIntent = activity.getIntent();
 
-		if (parentHost != null) {
-			godot = parentHost.getGodot();
-		}
-		if (godot == null) {
-			godot = new Godot(requireContext());
-		}
+		godot = new Godot(requireContext());
 		performEngineInitialization();
-		BenchmarkUtils.endBenchmarkMeasure("Startup", "GodotFragment::onCreate");
+		BenchmarkUtils.endBenchmarkMeasure("GodotFragment::onCreate");
 	}
 
 	private void performEngineInitialization() {
-		try {
-			godot.onCreate(this);
+		godot.onCreate(this);
 
-			if (!godot.onInitNativeLayer(this)) {
-				throw new IllegalStateException("Unable to initialize engine native layer");
-			}
+		if (!godot.onInitNativeLayer(this)) {
+			Log.e(TAG, "Unable to initialize engine native layer");
+			return;
+		}
 
-			godotContainerLayout = godot.onInitRenderView(this);
-			if (godotContainerLayout == null) {
-				throw new IllegalStateException("Unable to initialize engine render view");
-			}
-		} catch (IllegalStateException e) {
-			Log.e(TAG, "Engine initialization failed", e);
-			final String errorMessage = TextUtils.isEmpty(e.getMessage())
-					? getString(R.string.error_engine_setup_message)
-					: e.getMessage();
-			godot.alert(errorMessage, getString(R.string.text_error_title), godot::destroyAndKillProcess);
+		godotContainerLayout = godot.onInitRenderView(this);
+		if (godotContainerLayout == null) {
+			Log.e(TAG, "Unable to initialize engine render view");
+			return;
 		}
 	}
 
@@ -185,25 +165,13 @@ public class GodotFragment extends Fragment implements GodotHost {
 	}
 
 	@Override
-	public void onStop() {
-		super.onStop();
-		godot.onStop(this);
-	}
-
-	@Override
-	public void onStart() {
-		super.onStart();
-		godot.onStart(this);
-	}
-
-	@Override
 	public void onResume() {
 		super.onResume();
 		godot.onResume(this);
 	}
 
 	public void onBackPressed() {
-		godot.onBackPressed();
+		godot.onBackPressed(this);
 	}
 
 	@CallSuper
