@@ -194,7 +194,12 @@ def configure(env: "Environment"):
     # Link flags
 
     env.Append(LINKFLAGS="-Wl,--gc-sections -Wl,--no-undefined -Wl,-z,now".split())
-    env.Append(LINKFLAGS="-Wl,-soname,libgodot_android.so")
+    # Set SONAME dynamically if VERSION_SUFFIX is provided (for multi-version coexistence)
+    version_suffix = os.environ.get("VERSION_SUFFIX", "")
+    if version_suffix:
+        env.Append(LINKFLAGS=[f"-Wl,-soname,libgodot_android_{version_suffix}.so"])
+    else:
+        env.Append(LINKFLAGS=["-Wl,-soname,libgodot_android.so"])
 
     env.Prepend(CPPPATH=["#platform/android"])
     env.Append(CPPDEFINES=["ANDROID_ENABLED", "UNIX_ENABLED"])
