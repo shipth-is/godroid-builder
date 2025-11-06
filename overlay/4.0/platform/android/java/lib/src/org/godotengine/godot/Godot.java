@@ -47,16 +47,12 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.AlertDialog;
-import android.app.PendingIntent;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
-import android.content.SharedPreferences.Editor;
 import android.content.pm.ConfigurationInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Resources;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -66,8 +62,6 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
-import android.os.Messenger;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.Log;
@@ -83,10 +77,7 @@ import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsAnimation;
 import android.view.WindowManager;
-import android.widget.Button;
 import android.widget.FrameLayout;
-import android.widget.ProgressBar;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.CallSuper;
@@ -96,47 +87,20 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.fragment.app.Fragment;
 
-import com.google.android.vending.expansion.downloader.DownloadProgressInfo;
-import com.google.android.vending.expansion.downloader.DownloaderClientMarshaller;
-import com.google.android.vending.expansion.downloader.DownloaderServiceMarshaller;
-import com.google.android.vending.expansion.downloader.Helpers;
-import com.google.android.vending.expansion.downloader.IDownloaderClient;
-import com.google.android.vending.expansion.downloader.IDownloaderService;
-import com.google.android.vending.expansion.downloader.IStub;
-
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.InputStream;
-import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Locale;
 
-public class Godot extends Fragment implements SensorEventListener, IDownloaderClient {
+public class Godot extends Fragment implements SensorEventListener {
 	private static final String TAG = Godot.class.getSimpleName();
 
-	private IStub mDownloaderClientStub;
-	private TextView mStatusText;
-	private TextView mProgressFraction;
-	private TextView mProgressPercent;
-	private TextView mAverageSpeed;
-	private TextView mTimeRemaining;
-	private ProgressBar mPB;
 	private ClipboardManager mClipboard;
-
-	private View mDashboard;
-	private View mCellMessage;
-
-	private Button mPauseButton;
-	private Button mWiFiSettingsButton;
 
 	private XRMode xrMode = XRMode.REGULAR;
 	private boolean use_immersive = false;
 	private boolean use_debug_opengl = false;
-	private boolean mStatePaused;
 	private boolean activityResumed;
-	private int mState;
 
 	private GodotHost godotHost;
 	private GodotPluginRegistry pluginRegistry;
@@ -151,21 +115,7 @@ public class Godot extends Fragment implements SensorEventListener, IDownloaderC
 		return mCurrentIntent;
 	}
 
-	private void setState(int newState) {
-		if (mState != newState) {
-			mState = newState;
-			mStatusText.setText(Helpers.getDownloaderStringResourceIDFromState(newState));
-		}
-	}
-
-	private void setButtonPausedState(boolean paused) {
-		mStatePaused = paused;
-		int stringResourceID = paused ? R.string.text_button_resume : R.string.text_button_pause;
-		mPauseButton.setText(stringResourceID);
-	}
-
 	private String[] command_line;
-	private boolean use_apk_expansion;
 
 	private ViewGroup containerLayout;
 	public GodotRenderView mRenderView;
@@ -539,27 +489,7 @@ public class Godot extends Fragment implements SensorEventListener, IDownloaderC
 		return xrMode.inputFallbackMapping;
 	}
 
-	String expansion_pack_path;
-
 	private void initializeGodot() {
-		if (expansion_pack_path != null) {
-			String[] new_cmdline;
-			int cll = 0;
-			if (command_line != null) {
-				new_cmdline = new String[command_line.length + 2];
-				cll = command_line.length;
-				for (int i = 0; i < command_line.length; i++) {
-					new_cmdline[i] = command_line[i];
-				}
-			} else {
-				new_cmdline = new String[2];
-			}
-
-			new_cmdline[cll] = "--main-pack";
-			new_cmdline[cll + 1] = expansion_pack_path;
-			command_line = new_cmdline;
-		}
-
 		final Activity activity = getActivity();
 		io = new GodotIO(activity);
 		netUtils = new GodotNetUtils(activity);
@@ -580,16 +510,10 @@ public class Godot extends Fragment implements SensorEventListener, IDownloaderC
 				netUtils,
 				directoryAccessHandler,
 				fileAccessHandler,
-				use_apk_expansion,
+				false,
 				tts);
 
 		result_callback = null;
-	}
-
-	@Override
-	public void onServiceConnected(Messenger m) {
-		IDownloaderService remoteService = DownloaderServiceMarshaller.CreateProxy(m);
-		remoteService.onClientUpdated(mDownloaderClientStub.getMessenger());
 	}
 
 	@Override
@@ -602,11 +526,7 @@ public class Godot extends Fragment implements SensorEventListener, IDownloaderC
 		mClipboard = (ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE);
 		pluginRegistry = GodotPluginRegistry.initializePluginRegistry(this);
 
-		// check for apk expansion API
-		boolean md5mismatch = false;
 		command_line = getCommandLine();
-		String main_pack_md5 = null;
-		String main_pack_key = null;
 
 		List<String> new_args = new LinkedList<>();
 
@@ -628,20 +548,6 @@ public class Godot extends Fragment implements SensorEventListener, IDownloaderC
 						View.SYSTEM_UI_FLAG_FULLSCREEN | // hide status bar
 						View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
 				UiChangeListener();
-			} else if (command_line[i].equals("--use_apk_expansion")) {
-				use_apk_expansion = true;
-			} else if (has_extra && command_line[i].equals("--apk_expansion_md5")) {
-				main_pack_md5 = command_line[i + 1];
-				i++;
-			} else if (has_extra && command_line[i].equals("--apk_expansion_key")) {
-				main_pack_key = command_line[i + 1];
-				SharedPreferences prefs = activity.getSharedPreferences("app_data_keys",
-						MODE_PRIVATE);
-				Editor editor = prefs.edit();
-				editor.putString("store_public_key", main_pack_key);
-
-				editor.apply();
-				i++;
 			} else if (command_line[i].trim().length() != 0) {
 				new_args.add(command_line[i]);
 			}
@@ -652,68 +558,6 @@ public class Godot extends Fragment implements SensorEventListener, IDownloaderC
 		} else {
 			command_line = new_args.toArray(new String[new_args.size()]);
 		}
-		if (use_apk_expansion && main_pack_md5 != null && main_pack_key != null) {
-			// check that environment is ok!
-			if (!Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
-				// show popup and die
-			}
-
-			// Build the full path to the app's expansion files
-			try {
-				expansion_pack_path = Helpers.getSaveFilePath(getContext());
-				expansion_pack_path += "/main." + activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0).versionCode + "." + activity.getPackageName() + ".obb";
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-
-			File f = new File(expansion_pack_path);
-
-			boolean pack_valid = true;
-
-			if (!f.exists()) {
-				pack_valid = false;
-
-			} else if (obbIsCorrupted(expansion_pack_path, main_pack_md5)) {
-				pack_valid = false;
-				try {
-					f.delete();
-				} catch (Exception e) {
-				}
-			}
-
-			if (!pack_valid) {
-				Intent notifierIntent = new Intent(activity, activity.getClass());
-				notifierIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-
-				PendingIntent pendingIntent;
-				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-					pendingIntent = PendingIntent.getActivity(activity, 0,
-							notifierIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-				} else {
-					pendingIntent = PendingIntent.getActivity(activity, 0,
-							notifierIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-				}
-
-				int startResult;
-				try {
-					startResult = DownloaderClientMarshaller.startDownloadServiceIfRequired(
-							getContext(),
-							pendingIntent,
-							GodotDownloaderService.class);
-
-					if (startResult != DownloaderClientMarshaller.NO_DOWNLOAD_REQUIRED) {
-						// This is where you do set up to display the download
-						// progress (next step in onCreateView)
-						mDownloaderClientStub = DownloaderClientMarshaller.CreateStub(this,
-								GodotDownloaderService.class);
-
-						return;
-					}
-				} catch (NameNotFoundException e) {
-					// TODO Auto-generated catch block
-				}
-			}
-		}
 
 		mCurrentIntent = activity.getIntent();
 
@@ -722,23 +566,6 @@ public class Godot extends Fragment implements SensorEventListener, IDownloaderC
 
 	@Override
 	public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle icicle) {
-		if (mDownloaderClientStub != null) {
-			View downloadingExpansionView =
-					inflater.inflate(R.layout.downloading_expansion, container, false);
-			mPB = (ProgressBar)downloadingExpansionView.findViewById(R.id.progressBar);
-			mStatusText = (TextView)downloadingExpansionView.findViewById(R.id.statusText);
-			mProgressFraction = (TextView)downloadingExpansionView.findViewById(R.id.progressAsFraction);
-			mProgressPercent = (TextView)downloadingExpansionView.findViewById(R.id.progressAsPercentage);
-			mAverageSpeed = (TextView)downloadingExpansionView.findViewById(R.id.progressAverageSpeed);
-			mTimeRemaining = (TextView)downloadingExpansionView.findViewById(R.id.progressTimeRemaining);
-			mDashboard = downloadingExpansionView.findViewById(R.id.downloaderDashboard);
-			mCellMessage = downloadingExpansionView.findViewById(R.id.approveCellular);
-			mPauseButton = (Button)downloadingExpansionView.findViewById(R.id.pauseButton);
-			mWiFiSettingsButton = (Button)downloadingExpansionView.findViewById(R.id.wifiSettingsButton);
-
-			return downloadingExpansionView;
-		}
-
 		return containerLayout;
 	}
 
@@ -761,9 +588,6 @@ public class Godot extends Fragment implements SensorEventListener, IDownloaderC
 		activityResumed = false;
 
 		if (!godot_initialized) {
-			if (null != mDownloaderClientStub) {
-				mDownloaderClientStub.disconnect(getActivity());
-			}
 			return;
 		}
 		mRenderView.onActivityPaused();
@@ -799,9 +623,6 @@ public class Godot extends Fragment implements SensorEventListener, IDownloaderC
 		super.onResume();
 		activityResumed = true;
 		if (!godot_initialized) {
-			if (null != mDownloaderClientStub) {
-				mDownloaderClientStub.connect(getActivity());
-			}
 			return;
 		}
 
@@ -987,46 +808,6 @@ public class Godot extends Fragment implements SensorEventListener, IDownloaderC
 		}
 	}
 
-	private boolean obbIsCorrupted(String f, String main_pack_md5) {
-		try {
-			InputStream fis = new FileInputStream(f);
-
-			// Create MD5 Hash
-			byte[] buffer = new byte[16384];
-
-			MessageDigest complete = MessageDigest.getInstance("MD5");
-			int numRead;
-			do {
-				numRead = fis.read(buffer);
-				if (numRead > 0) {
-					complete.update(buffer, 0, numRead);
-				}
-			} while (numRead != -1);
-
-			fis.close();
-			byte[] messageDigest = complete.digest();
-
-			// Create Hex String
-			StringBuilder hexString = new StringBuilder();
-			for (byte b : messageDigest) {
-				String s = Integer.toHexString(0xFF & b);
-				if (s.length() == 1) {
-					s = "0" + s;
-				}
-				hexString.append(s);
-			}
-			String md5str = hexString.toString();
-
-			if (!md5str.equals(main_pack_md5)) {
-				return true;
-			}
-			return false;
-		} catch (Exception e) {
-			e.printStackTrace();
-			return true;
-		}
-	}
-
 	public boolean requestPermission(String p_name) {
 		return PermissionsUtil.requestPermission(p_name, getActivity());
 	}
@@ -1037,100 +818,6 @@ public class Godot extends Fragment implements SensorEventListener, IDownloaderC
 
 	public String[] getGrantedPermissions() {
 		return PermissionsUtil.getGrantedPermissions(getActivity());
-	}
-
-	/**
-	 * The download state should trigger changes in the UI --- it may be useful
-	 * to show the state as being indeterminate at times. This sample can be
-	 * considered a guideline.
-	 */
-	@Override
-	public void onDownloadStateChanged(int newState) {
-		setState(newState);
-		boolean showDashboard = true;
-		boolean showCellMessage = false;
-		boolean paused;
-		boolean indeterminate;
-		switch (newState) {
-			case IDownloaderClient.STATE_IDLE:
-				// STATE_IDLE means the service is listening, so it's
-				// safe to start making remote service calls.
-				paused = false;
-				indeterminate = true;
-				break;
-			case IDownloaderClient.STATE_CONNECTING:
-			case IDownloaderClient.STATE_FETCHING_URL:
-				showDashboard = true;
-				paused = false;
-				indeterminate = true;
-				break;
-			case IDownloaderClient.STATE_DOWNLOADING:
-				paused = false;
-				showDashboard = true;
-				indeterminate = false;
-				break;
-
-			case IDownloaderClient.STATE_FAILED_CANCELED:
-			case IDownloaderClient.STATE_FAILED:
-			case IDownloaderClient.STATE_FAILED_FETCHING_URL:
-			case IDownloaderClient.STATE_FAILED_UNLICENSED:
-				paused = true;
-				showDashboard = false;
-				indeterminate = false;
-				break;
-			case IDownloaderClient.STATE_PAUSED_NEED_CELLULAR_PERMISSION:
-			case IDownloaderClient.STATE_PAUSED_WIFI_DISABLED_NEED_CELLULAR_PERMISSION:
-				showDashboard = false;
-				paused = true;
-				indeterminate = false;
-				showCellMessage = true;
-				break;
-
-			case IDownloaderClient.STATE_PAUSED_BY_REQUEST:
-				paused = true;
-				indeterminate = false;
-				break;
-			case IDownloaderClient.STATE_PAUSED_ROAMING:
-			case IDownloaderClient.STATE_PAUSED_SDCARD_UNAVAILABLE:
-				paused = true;
-				indeterminate = false;
-				break;
-			case IDownloaderClient.STATE_COMPLETED:
-				showDashboard = false;
-				paused = false;
-				indeterminate = false;
-				initializeGodot();
-				return;
-			default:
-				paused = true;
-				indeterminate = true;
-				showDashboard = true;
-		}
-		int newDashboardVisibility = showDashboard ? View.VISIBLE : View.GONE;
-		if (mDashboard.getVisibility() != newDashboardVisibility) {
-			mDashboard.setVisibility(newDashboardVisibility);
-		}
-		int cellMessageVisibility = showCellMessage ? View.VISIBLE : View.GONE;
-		if (mCellMessage.getVisibility() != cellMessageVisibility) {
-			mCellMessage.setVisibility(cellMessageVisibility);
-		}
-
-		mPB.setIndeterminate(indeterminate);
-		setButtonPausedState(paused);
-	}
-
-	@Override
-	public void onDownloadProgress(DownloadProgressInfo progress) {
-		mAverageSpeed.setText(getString(R.string.kilobytes_per_second,
-				Helpers.getSpeedString(progress.mCurrentSpeed)));
-		mTimeRemaining.setText(getString(R.string.time_remaining,
-				Helpers.getTimeRemaining(progress.mTimeRemaining)));
-
-		mPB.setMax((int)(progress.mOverallTotal >> 8));
-		mPB.setProgress((int)(progress.mOverallProgress >> 8));
-		mProgressPercent.setText(String.format(Locale.ENGLISH, "%d %%", progress.mOverallProgress * 100 / progress.mOverallTotal));
-		mProgressFraction.setText(Helpers.getDownloadProgressString(progress.mOverallProgress,
-				progress.mOverallTotal));
 	}
 
 	public void initInputDevices() {

@@ -37,7 +37,8 @@
 #include <stdio.h>
 
 class FileAccessAndroid : public FileAccess {
-	mutable AAsset *asset = nullptr;
+	static String extracted_assets_path;
+	FILE *file_handle = nullptr;
 	mutable uint64_t len = 0;
 	mutable uint64_t pos = 0;
 	mutable bool eof = false;
