@@ -115,6 +115,45 @@ printf '%s\0' "${files[@]}" | xargs -0 perl -0777 -pi -e '
   s@org/godotengine/godot(?!'"${pkgSuffix//_/\\_}"')@org/godotengine/godot'"$pkgSuffix"'@g
 '
 
+# 3) Namespace all Android resources (e.g. godot_app_layout -> godot_app_layout_v4_5)
+echo "==> Namespacing Android resources with suffix: $pkgSuffix"
+
+resDir="$godotRoot/platform/android/java/lib/res"
+srcDir="$godotRoot/platform/android/java/lib/src"
+
+if [[ -d "$resDir" ]]; then
+  echo "    Processing $resDir ..."
+
+  # Rename all resource files (layout/xml/mipmap/etc.)
+  find "$resDir" -type f | while read -r f; do
+    dir=$(dirname "$f")
+    base=$(basename "$f")
+    ext="${base##*.}"
+    name="${base%.*}"
+    [[ "$name" == *"$pkgSuffix" ]] && continue
+    mv "$f" "$dir/${name}${pkgSuffix}.${ext}"
+  done
+
+  # Patch resource names inside <resources> XMLs (values/strings.xml etc.)
+  find "$resDir" -type f -path "*/values/*.xml" | while read -r f; do
+    sed -i "s/\(<[a-zA-Z_]\+\s\+name=\"\)\([^\"]\+\)\"/\1\2${pkgSuffix}\"/g" "$f"
+  done
+
+  # Patch R.* references in Java/Kotlin source files
+  find "$srcDir" -type f \( -name "*.kt" -o -name "*.java" \) | while read -r f; do
+    sed -i "s/R\.\([a-z_]\+\)\.\([a-zA-Z0-9_]\+\)/R.\1.\2${pkgSuffix}/g" "$f"
+  done
+
+  # Patch @layout/, @xml/, @string/, etc. in XML and manifests
+  find "$godotRoot/platform/android/java" -type f \( -name "*.xml" -o -name "AndroidManifest.xml" \) | while read -r f; do
+    sed -i "s/@\([a-zA-Z_]\+\)\/\([a-zA-Z0-9_]\+\)/@\1\/\2${pkgSuffix}/g" "$f"
+  done
+
+  echo "    ✅ Resource namespacing complete."
+else
+  echo "    (no res/ directory found)"
+fi
+
 # 3) JNI symbol prefix rename with correct mangling (_ -> _1)
 #    Restrict to native sources/headers under platform/android
 echo "==> Rewriting JNI symbols with correct mangling..."
