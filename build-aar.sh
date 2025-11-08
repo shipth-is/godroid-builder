@@ -124,29 +124,47 @@ srcDir="$godotRoot/platform/android/java/lib/src"
 if [[ -d "$resDir" ]]; then
   echo "    Processing $resDir ..."
 
-  # Rename all resource files (layout/xml/mipmap/etc.)
-  find "$resDir" -type f | while read -r f; do
+  #
+  # 1. Rename resource *files* (layouts, xmls, drawables, etc.)
+  #    Skip files under values/ since those define resource names, not filenames.
+  #
+  find "$resDir" -type f ! -path "*/values/*" | while read -r f; do
     dir=$(dirname "$f")
     base=$(basename "$f")
     ext="${base##*.}"
     name="${base%.*}"
-    [[ "$name" == *"$pkgSuffix" ]] && continue
     mv "$f" "$dir/${name}${pkgSuffix}.${ext}"
   done
 
-  # Patch resource names inside <resources> XMLs (values/strings.xml etc.)
+  #
+  # 2. Patch resource *definitions* inside values XMLs
+  #    Only rename <string>, <color>, <dimen>, <style>, <drawable>, etc.
+  #    Skip <item name="android:..."> or <attr ...>
+  #
   find "$resDir" -type f -path "*/values/*.xml" | while read -r f; do
-    sed -i "s/\(<[a-zA-Z_]\+\s\+name=\"\)\([^\"]\+\)\"/\1\2${pkgSuffix}\"/g" "$f"
+    sed -i -E \
+      "s@(<(string|color|dimen|style|bool|integer|array)[^>]*name=\")([^\":]+)\"@\1\3${pkgSuffix}\"@g" \
+      "$f"
   done
 
-  # Patch R.* references in Java/Kotlin source files
+  #
+  # 3. Patch Java/Kotlin R.* references
+  #    Only rename resource *types* that are safe to version.
+  #
   find "$srcDir" -type f \( -name "*.kt" -o -name "*.java" \) | while read -r f; do
-    sed -i "s/R\.\([a-z_]\+\)\.\([a-zA-Z0-9_]\+\)/R.\1.\2${pkgSuffix}/g" "$f"
+    sed -i -E \
+      "s@R\.(layout|xml|string|style|dimen|color|drawable|mipmap)\.([A-Za-z0-9_]+)@R.\1.\2${pkgSuffix}@g" \
+      "$f"
   done
 
-  # Patch @layout/, @xml/, @string/, etc. in XML and manifests
+  #
+  # 4. Patch @resource references in XML & manifests
+  #    Skip @id and android:attr refs.
+  #
   find "$godotRoot/platform/android/java" -type f \( -name "*.xml" -o -name "AndroidManifest.xml" \) | while read -r f; do
-    sed -i "s/@\([a-zA-Z_]\+\)\/\([a-zA-Z0-9_]\+\)/@\1\/\2${pkgSuffix}/g" "$f"
+    sed -i -E \
+      "s@@(layout|xml|string|style|dimen|color|drawable|mipmap)/([A-Za-z0-9_]+)@@\1/\2${pkgSuffix}@g" \
+      "$f"
   done
 
   echo "    ✅ Resource namespacing complete."
