@@ -118,59 +118,63 @@ printf '%s\0' "${files[@]}" | xargs -0 perl -0777 -pi -e '
 # 3) Namespace all Android resources (e.g. godot_app_layout -> godot_app_layout_v4_5)
 echo "==> Namespacing Android resources with suffix: $pkgSuffix"
 
-resDir="$godotRoot/platform/android/java/lib/res"
+resDirs=(
+  "$godotRoot/platform/android/java/lib/res"
+  "$godotRoot/platform/android/java/app/res"
+)
 srcDir="$godotRoot/platform/android/java/lib/src"
 
-if [[ -d "$resDir" ]]; then
-  echo "    Processing $resDir ..."
+for resDir in "${resDirs[@]}"; do
+  if [[ -d "$resDir" ]]; then
+    echo "    Processing $resDir ..."
 
-  #
-  # 1. Rename resource *files* (layouts, xmls, drawables, etc.)
-  #    Skip files under values/ since those define resource names, not filenames.
-  #
-  find "$resDir" -type f ! -path "*/values/*" | while read -r f; do
-    dir=$(dirname "$f")
-    base=$(basename "$f")
-    ext="${base##*.}"
-    name="${base%.*}"
-    mv "$f" "$dir/${name}${pkgSuffix}.${ext}"
-  done
+    # 1) Rename resource files (layout/xml/mipmap/etc.), excluding any values* folders
+    find "$resDir" -type f ! -path "*/values*" | while read -r f; do
+      dir=$(dirname "$f")
+      base=$(basename "$f")
+      ext="${base##*.}"
+      name="${base%.*}"
+      mv "$f" "$dir/${name}${pkgSuffix}.${ext}"
+    done
 
-  #
-  # 2. Patch resource *definitions* inside values XMLs
-  #    Only rename <string>, <color>, <dimen>, <style>, <drawable>, etc.
-  #    Skip <item name="android:..."> or <attr ...>
-  #
-  find "$resDir" -type f -path "*/values/*.xml" | while read -r f; do
-    sed -i -E \
-      "s@(<(string|color|dimen|style|bool|integer|array)[^>]*name=\")([^\":]+)\"@\1\3${pkgSuffix}\"@g" \
-      "$f"
-  done
+    # 2) Patch resource *definitions* inside values/ and values-*/ XMLs
+    #    - rename <string|color|dimen|style|bool|integer|array name="...">
+    #    - then rename parent="..." in styles
+    find "$resDir" -type f -path "*/values*" -name "*.xml" | while read -r f; do
+      # 2a) rename the resource name itself
+      sed -i -E \
+        "s#(<(string|color|dimen|style|bool|integer|array)[^>]*name=\")([^\":]+)\"#\1\3${pkgSuffix}\"#g" \
+        "$f"
 
-  #
-  # 3. Patch Java/Kotlin R.* references
-  #    Only rename resource *types* that are safe to version.
-  #
+      # 2b) rename style parents, e.g. parent="NotificationText" -> parent="NotificationTextv4_5"
+      sed -i -E \
+        "s#(parent=\")([A-Za-z0-9_]+)\"#\1\2${pkgSuffix}\"#g" \
+        "$f"
+    done
+
+  else
+    echo "    (no res/ directory found at $resDir)"
+  fi
+done
+
+# 3) Patch Java/Kotlin R.<type>.<name> references
+if [[ -d "$srcDir" ]]; then
   find "$srcDir" -type f \( -name "*.kt" -o -name "*.java" \) | while read -r f; do
     sed -i -E \
-      "s@R\.(layout|xml|string|style|dimen|color|drawable|mipmap)\.([A-Za-z0-9_]+)@R.\1.\2${pkgSuffix}@g" \
+      "s#R\\.(layout|xml|string|style|dimen|color|drawable|mipmap)\\.([A-Za-z0-9_]+)#R.\\1.\\2${pkgSuffix}#g" \
       "$f"
   done
-
-  #
-  # 4. Patch @resource references in XML & manifests
-  #    Skip @id and android:attr refs.
-  #
-  find "$godotRoot/platform/android/java" -type f \( -name "*.xml" -o -name "AndroidManifest.xml" \) | while read -r f; do
-    sed -i -E \
-      "s@@(layout|xml|string|style|dimen|color|drawable|mipmap)/([A-Za-z0-9_]+)@@\1/\2${pkgSuffix}@g" \
-      "$f"
-  done
-
-  echo "    ✅ Resource namespacing complete."
-else
-  echo "    (no res/ directory found)"
 fi
+
+# 4) Patch @layout/, @xml/, @string/, @style/, ... in XMLs + manifests for the whole android tree
+find "$godotRoot/platform/android/java" -type f \( -name "*.xml" -o -name "AndroidManifest.xml" \) | while read -r f; do
+  sed -i -E \
+    "s#@(layout|xml|string|style|dimen|color|drawable|mipmap)/([A-Za-z0-9_]+)#@\\1/\\2${pkgSuffix}#g" \
+    "$f"
+done
+
+echo "    ✅ Resource namespacing complete."
+
 
 # 3) JNI symbol prefix rename with correct mangling (_ -> _1)
 #    Restrict to native sources/headers under platform/android
