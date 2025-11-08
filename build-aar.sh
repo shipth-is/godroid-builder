@@ -122,7 +122,6 @@ resDirs=(
   "$godotRoot/platform/android/java/lib/res"
   "$godotRoot/platform/android/java/app/res"
 )
-srcDir="$godotRoot/platform/android/java/lib/src"
 
 for resDir in "${resDirs[@]}"; do
   if [[ -d "$resDir" ]]; then
@@ -158,13 +157,22 @@ for resDir in "${resDirs[@]}"; do
 done
 
 # 3) Patch Java/Kotlin R.<type>.<name> references
-if [[ -d "$srcDir" ]]; then
-  find "$srcDir" -type f \( -name "*.kt" -o -name "*.java" \) | while read -r f; do
-    sed -i -E \
-      "s#R\\.(layout|xml|string|style|dimen|color|drawable|mipmap)\\.([A-Za-z0-9_]+)#R.\\1.\\2${pkgSuffix}#g" \
-      "$f"
-  done
-fi
+# 3) Patch Java/Kotlin R.<type>.<name> references
+srcDirs=(
+  "$godotRoot/platform/android/java/lib/src"
+  "$godotRoot/platform/android/java/app/src"
+)
+
+for srcDir in "${srcDirs[@]}"; do
+  if [[ -d "$srcDir" ]]; then
+    echo "    Patching R.* references in $srcDir ..."
+    find "$srcDir" -type f \( -name "*.kt" -o -name "*.java" \) | while read -r f; do
+      sed -i -E \
+        "s#R\\.(layout|xml|string|style|dimen|color|drawable|mipmap)\\.([A-Za-z0-9_]+)#R.\\1.\\2${pkgSuffix}#g" \
+        "$f"
+    done
+  fi
+done
 
 # 4) Patch @layout/, @xml/, @string/, @style/, ... in XMLs + manifests for the whole android tree
 find "$godotRoot/platform/android/java" -type f \( -name "*.xml" -o -name "AndroidManifest.xml" \) | while read -r f; do
