@@ -5,7 +5,6 @@ scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 downloadOnly=false
 
-# --- Parse flags first ---
 args=()
 for arg in "$@"; do
   case "$arg" in
@@ -20,20 +19,9 @@ done
 
 set -- "${args[@]}"
 
-# --- Parse positional arguments ---
-# Usage: ./build-aar.sh <version> [release] [--downloadOnly]
-if [ $# -eq 2 ]; then
-  godotVersion="$1"
-  godotRelease="$2"
-  refName="${godotVersion}-${godotRelease}"   # e.g. 4.5-stable or 4.4-rc1
-elif [ $# -eq 1 ]; then
-  godotVersion="$1"
-  godotRelease=""
-  refName="$godotVersion"                     # e.g. 3.x or master
-else
-  echo "Usage: $0 <godotVersion> [godotRelease] [--downloadOnly]"
-  exit 1
-fi
+# Usage: ./build-aar.sh <version>  [--downloadOnly]
+godotVersion="$1"
+refName="$godotVersion" # e.g. 3.x or
 
 pkgSuffix="v${godotVersion//./_}"      # v4_4_1 or v3_x
 jniSuffix="${pkgSuffix//_/_1}"         # v4_14_11   (JNI: "_" -> "_1")
@@ -64,11 +52,7 @@ curl -fSL -H "Accept: application/octet-stream" \
 7za x -y godot-swappy.7z -o"$godotRoot/thirdparty/swappy-frame-pacing"
 rm godot-swappy.7z
 
-if [ -n "${godotRelease:-}" ]; then
-  overlayDir="$scriptDir/overlay/${godotVersion}-${godotRelease}"
-else
-  overlayDir="$scriptDir/overlay/${godotVersion}"
-fi
+overlayDir="$scriptDir/overlay/${godotVersion}"
 [ -d "$overlayDir" ] || { echo "Overlay directory not found"; exit 1; }
 
 echo "==> Applying overlay directory $overlayDir ..."
@@ -204,9 +188,13 @@ export VERSION_SUFFIX="${pkgSuffix}"
 if [[ "$godotVersion" == 3.* ]]; then
   scons platform=android target=release android_arch=armv7
   scons platform=android target=release android_arch=arm64v8
+  scons platform=android target=debug android_arch=armv7
+  scons platform=android target=debug android_arch=arm64v8
 else
   scons platform=android target=template_release arch=arm32
   scons platform=android target=template_release arch=arm64 generate_android_binaries=yes
+  scons platform=android target=template_debug arch=arm32
+  scons platform=android target=template_debug arch=arm64 generate_android_binaries=yes
 fi
 
 echo "==> Gradle: generateGodotTemplates..."
@@ -216,6 +204,7 @@ cd "$godotRoot/platform/android/java/"
 if [[ "$godotVersion" == 3.* ]]; then
   echo "==> Renaming AAR for Godot 3.x..."
   mv "$godotRoot/bin/godot-lib.release.aar" "$godotRoot/bin/godot-lib.template_release.aar"
+  mv "$godotRoot/bin/godot-lib.debug.aar" "$godotRoot/bin/godot-lib.template_debug.aar"
 fi
 
 echo "==> Done. Built files in:"
@@ -225,4 +214,5 @@ ls -l
 
 echo "==> AAR ready for Maven publishing:"
 echo "    File: $godotRoot/bin/godot-lib.template_release.aar"
+echo "    File: $godotRoot/bin/godot-lib.template_debug.aar"
 echo "    To publish: ./gradlew publish -PgodotVersion=${godotVersion}"

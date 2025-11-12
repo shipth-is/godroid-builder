@@ -83,7 +83,7 @@ jobs:
       run: |
         chmod +x build-aar.sh
         ./build-aar.sh "${{ steps.version.outputs.godotVersion }}"
-        
+
     - name: Verify AAR exists
       run: |
         if [ ! -f "godot-${{ steps.version.outputs.godotVersion }}/bin/godot-lib.template_release.aar" ]; then

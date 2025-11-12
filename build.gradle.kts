@@ -9,7 +9,8 @@ version = project.findProperty("version") as String? ?: "0.0.1"
 
 // Accept godot version as a parameter, default to 4.4.1 if not provided
 val godotVersion = project.findProperty("godotVersion") as String? ?: "4.4.1"
-val aarFile = file("godot-${godotVersion}/bin/godot-lib.template_release.aar")
+val releaseAARfile = file("godot-${godotVersion}/bin/godot-lib.template_release.aar")
+var debugAARfile = file("godot-${godotVersion}/bin/godot-lib.template_debug.aar")
 
 publishing {
     publications {
@@ -17,8 +18,12 @@ publishing {
             artifactId = "godot-lib-v${godotVersion.replace(".", "-")}"
             
             // Add the AAR file as an artifact
-            artifact(aarFile) {
+            artifact(releaseAARfile) {
                 classifier = "template-release"
+                extension = "aar"
+            }
+            artifact(debugAARfile) {
+                classifier = "template-debug"
                 extension = "aar"
             }
             
