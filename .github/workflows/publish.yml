@@ -82,8 +82,7 @@ jobs:
     - name: Build AAR
       run: |
         chmod +x build-aar.sh
-        ./build-aar.sh "${{ steps.version.outputs.godotVersion }}" --target=release
-        ./build-aar.sh "${{ steps.version.outputs.godotVersion }}" --target=debug
+        ./build-aar.sh "${{ steps.version.outputs.godotVersion }}"
 
     - name: Verify AAR exists
       run: |
