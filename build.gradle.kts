@@ -76,7 +76,7 @@ tasks.named("publish") {
 
 tasks.register("buildAar") {
     doLast {
-        if (!releaseAARfile.exists() {
+        if (!releaseAARfile.exists()) {
             throw GradleException("AAR file not found: ${releaseAARfile.absolutePath}. Run ./build-aar.sh first.")
         }
         if (!debugAARfile.exists()) {
