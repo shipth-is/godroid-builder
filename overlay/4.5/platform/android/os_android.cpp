@@ -61,6 +61,16 @@
 #include <cstdio>
 #include <jni.h>
 
+// Crash handler includes
+#include <signal.h>
+#include <sys/stat.h>
+#include <ucontext.h>
+#include <unistd.h>
+#include <unwindstack/Maps.h>
+#include <unwindstack/Memory.h>
+#include <unwindstack/Regs.h>
+#include <unwindstack/Unwinder.h>
+
 const char *OS_Android::ANDROID_EXEC_PATH = "apk";
 
 // Native log forwarding to Java using com.shipthis.go.LogInterceptor
@@ -159,6 +169,70 @@ static void forward_native_log_to_java(int prio, const char* tag, const char* ms
 	}
 }
 
+// Crash handler implementation
+#define MAX_FRAMES 64
+#define CRASH_DIR "/data/user/0/com.shipthis.go/files/crashes"
+
+static char g_signal_stack[64 * 1024];
+
+static void crash_handler(int signum, siginfo_t *info, void *user_context) {
+	static bool in_handler = false;
+	if (in_handler) {
+		_exit(1);
+	}
+	in_handler = true;
+
+	ucontext_t *uctx = (ucontext_t *)user_context;
+
+	// Unwind stack
+	auto regs = unwindstack::Regs::CreateFromUcontext(
+		unwindstack::Regs::CurrentArch(), uctx);
+	unwindstack::LocalMaps maps;
+	maps.Parse();
+	auto memory = unwindstack::Memory::CreateProcessMemoryCached(getpid());
+	unwindstack::Unwinder unwinder(MAX_FRAMES, &maps, regs.get(), memory);
+	unwinder.Unwind();
+
+	// Write crash file
+	FILE *f = fopen("/data/user/0/com.shipthis.go/files/crashes/crash.txt", "w");
+	if (f) {
+		fprintf(f, "Signal: %d\nStack:\n", signum);
+		for (const auto &frame : unwinder.frames()) {
+			fprintf(f, "0x%lx %s %s\n",
+				frame.pc,
+				frame.function_name.empty() ? "<unknown>" : frame.function_name.c_str(),
+				frame.map_name.c_str());
+		}
+		fclose(f);
+	}
+
+	raise(signum);
+}
+
+static void init_crash_handler() {
+	// Setup alternate stack
+	stack_t stack;
+	stack.ss_sp = g_signal_stack;
+	stack.ss_size = sizeof(g_signal_stack);
+	stack.ss_flags = 0;
+	sigaltstack(&stack, nullptr);
+
+	// Create crash directory
+	mkdir(CRASH_DIR, 0755);
+
+	// Install signal handlers
+	struct sigaction sa;
+	sa.sa_sigaction = crash_handler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
+
+	sigaction(SIGABRT, &sa, nullptr);
+	sigaction(SIGSEGV, &sa, nullptr);
+	sigaction(SIGBUS, &sa, nullptr);
+	sigaction(SIGILL, &sa, nullptr);
+	sigaction(SIGFPE, &sa, nullptr);
+}
+
 String _remove_symlink(const String &dir) {
 	// Workaround for Android 6.0+ using a symlink.
 	// Save the current directory.
@@ -231,6 +305,9 @@ void OS_Android::initialize_core() {
 
 void OS_Android::initialize() {
 	initialize_core();
+	
+	// Initialize crash handler early
+	init_crash_handler();
 }
 
 void OS_Android::initialize_joypads() {
