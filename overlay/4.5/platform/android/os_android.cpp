@@ -66,10 +66,10 @@
 #include <sys/stat.h>
 #include <ucontext.h>
 #include <unistd.h>
-#include <unwindstack/Maps.h>
-#include <unwindstack/Memory.h>
-#include <unwindstack/Regs.h>
-#include <unwindstack/Unwinder.h>
+#include <unwind.h>
+#include <dlfcn.h>
+#include <cxxabi.h>
+#include <string.h>
 
 const char *OS_Android::ANDROID_EXEC_PATH = "apk";
 
@@ -175,6 +175,79 @@ static void forward_native_log_to_java(int prio, const char* tag, const char* ms
 
 static char g_signal_stack[64 * 1024];
 
+// Circular buffer for last 10 log messages
+static char g_log_history[10][4096];
+static int g_log_index = 0;
+static int g_log_count = 0;
+static bool g_log_writing = false;
+
+static void write_last10_logs() {
+	if (g_log_writing) return; // Prevent re-entrancy
+	g_log_writing = true;
+
+	FILE *f = fopen("/data/user/0/com.shipthis.go/files/crashes/last10.txt", "w");
+	if (f) {
+		int start = g_log_count < 10 ? 0 : g_log_index;
+		int count = g_log_count < 10 ? g_log_count : 10;
+		for (int i = 0; i < count; i++) {
+			int idx = (start + i) % 10;
+			fprintf(f, "%s\n", g_log_history[idx]);
+		}
+		fclose(f);
+	}
+	g_log_writing = false;
+}
+
+struct crash_info {
+	FILE *file;
+	int frame_num;
+	int max_frames;
+};
+
+static _Unwind_Reason_Code unwind_callback(struct _Unwind_Context *context, void *arg) {
+	crash_info *info = (crash_info *)arg;
+
+	if (info->frame_num >= info->max_frames) {
+		return _URC_END_OF_STACK;
+	}
+
+	_Unwind_Word pc = _Unwind_GetIP(context);
+	if (pc == 0) {
+		return _URC_END_OF_STACK;
+	}
+
+	// Try to get symbol info via dladdr
+	Dl_info dl_info;
+	if (dladdr((void *)pc, &dl_info) != 0) {
+		const char *func_name = "<unknown>";
+		if (dl_info.dli_sname) {
+			// Try to demangle C++ names
+			int status = 0;
+			char *demangled = abi::__cxa_demangle(dl_info.dli_sname, nullptr, nullptr, &status);
+			if (status == 0 && demangled) {
+				func_name = demangled;
+				fprintf(info->file, "#%d 0x%lx %s", info->frame_num++, (unsigned long)pc, func_name);
+				free(demangled);
+			} else {
+				func_name = dl_info.dli_sname;
+				fprintf(info->file, "#%d 0x%lx %s", info->frame_num++, (unsigned long)pc, func_name);
+			}
+		} else {
+			fprintf(info->file, "#%d 0x%lx <unknown>", info->frame_num++, (unsigned long)pc);
+		}
+
+		// Also include library name if available
+		if (dl_info.dli_fname) {
+			fprintf(info->file, " (%s)", dl_info.dli_fname);
+		}
+		fprintf(info->file, "\n");
+	} else {
+		fprintf(info->file, "#%d 0x%lx <unknown>\n", info->frame_num++, (unsigned long)pc);
+	}
+
+	return _URC_NO_REASON;
+}
+
 static void crash_handler(int signum, siginfo_t *info, void *user_context) {
 	static bool in_handler = false;
 	if (in_handler) {
@@ -182,27 +255,18 @@ static void crash_handler(int signum, siginfo_t *info, void *user_context) {
 	}
 	in_handler = true;
 
-	ucontext_t *uctx = (ucontext_t *)user_context;
-
-	// Unwind stack
-	auto regs = unwindstack::Regs::CreateFromUcontext(
-		unwindstack::Regs::CurrentArch(), uctx);
-	unwindstack::LocalMaps maps;
-	maps.Parse();
-	auto memory = unwindstack::Memory::CreateProcessMemoryCached(getpid());
-	unwindstack::Unwinder unwinder(MAX_FRAMES, &maps, regs.get(), memory);
-	unwinder.Unwind();
-
 	// Write crash file
 	FILE *f = fopen("/data/user/0/com.shipthis.go/files/crashes/crash.txt", "w");
 	if (f) {
 		fprintf(f, "Signal: %d\nStack:\n", signum);
-		for (const auto &frame : unwinder.frames()) {
-			fprintf(f, "0x%lx %s %s\n",
-				frame.pc,
-				frame.function_name.empty() ? "<unknown>" : frame.function_name.c_str(),
-				frame.map_name.c_str());
-		}
+
+		crash_info cinfo;
+		cinfo.file = f;
+		cinfo.frame_num = 0;
+		cinfo.max_frames = MAX_FRAMES;
+
+		_Unwind_Backtrace(unwind_callback, &cinfo);
+
 		fclose(f);
 	}
 
@@ -256,6 +320,15 @@ public:
 		// Format the message
 		char buffer[4096];
 		vsnprintf(buffer, sizeof(buffer), p_format, p_list);
+
+		// Update circular buffer
+		strncpy(g_log_history[g_log_index], buffer, sizeof(g_log_history[0]) - 1);
+		g_log_history[g_log_index][sizeof(g_log_history[0]) - 1] = '\0';
+		g_log_index = (g_log_index + 1) % 10;
+		if (g_log_count < 10) g_log_count++;
+
+		// Write file (non-blocking: quick check, single write)
+		write_last10_logs();
 
 		int prio = p_err ? ANDROID_LOG_ERROR : ANDROID_LOG_INFO;
 
