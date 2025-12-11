@@ -61,16 +61,6 @@
 #include <cstdio>
 #include <jni.h>
 
-// Crash handler includes
-#include <signal.h>
-#include <sys/stat.h>
-#include <ucontext.h>
-#include <unistd.h>
-#include <unwind.h>
-#include <dlfcn.h>
-#include <cxxabi.h>
-#include <string.h>
-
 const char *OS_Android::ANDROID_EXEC_PATH = "apk";
 
 // Native log forwarding to Java using com.shipthis.go.LogInterceptor
@@ -169,134 +159,6 @@ static void forward_native_log_to_java(int prio, const char* tag, const char* ms
 	}
 }
 
-// Crash handler implementation
-#define MAX_FRAMES 64
-#define CRASH_DIR "/data/user/0/com.shipthis.go/files/crashes"
-
-static char g_signal_stack[64 * 1024];
-
-// Circular buffer for last 10 log messages
-static char g_log_history[10][4096];
-static int g_log_index = 0;
-static int g_log_count = 0;
-static bool g_log_writing = false;
-
-static void write_last10_logs() {
-	if (g_log_writing) return; // Prevent re-entrancy
-	g_log_writing = true;
-
-	FILE *f = fopen("/data/user/0/com.shipthis.go/files/crashes/last10.txt", "w");
-	if (f) {
-		int start = g_log_count < 10 ? 0 : g_log_index;
-		int count = g_log_count < 10 ? g_log_count : 10;
-		for (int i = 0; i < count; i++) {
-			int idx = (start + i) % 10;
-			fprintf(f, "%s\n", g_log_history[idx]);
-		}
-		fclose(f);
-	}
-	g_log_writing = false;
-}
-
-struct crash_info {
-	FILE *file;
-	int frame_num;
-	int max_frames;
-};
-
-static _Unwind_Reason_Code unwind_callback(struct _Unwind_Context *context, void *arg) {
-	crash_info *info = (crash_info *)arg;
-
-	if (info->frame_num >= info->max_frames) {
-		return _URC_END_OF_STACK;
-	}
-
-	_Unwind_Word pc = _Unwind_GetIP(context);
-	if (pc == 0) {
-		return _URC_END_OF_STACK;
-	}
-
-	// Try to get symbol info via dladdr
-	Dl_info dl_info;
-	if (dladdr((void *)pc, &dl_info) != 0) {
-		const char *func_name = "<unknown>";
-		if (dl_info.dli_sname) {
-			// Try to demangle C++ names
-			int status = 0;
-			char *demangled = abi::__cxa_demangle(dl_info.dli_sname, nullptr, nullptr, &status);
-			if (status == 0 && demangled) {
-				func_name = demangled;
-				fprintf(info->file, "#%d 0x%lx %s", info->frame_num++, (unsigned long)pc, func_name);
-				free(demangled);
-			} else {
-				func_name = dl_info.dli_sname;
-				fprintf(info->file, "#%d 0x%lx %s", info->frame_num++, (unsigned long)pc, func_name);
-			}
-		} else {
-			fprintf(info->file, "#%d 0x%lx <unknown>", info->frame_num++, (unsigned long)pc);
-		}
-
-		// Also include library name if available
-		if (dl_info.dli_fname) {
-			fprintf(info->file, " (%s)", dl_info.dli_fname);
-		}
-		fprintf(info->file, "\n");
-	} else {
-		fprintf(info->file, "#%d 0x%lx <unknown>\n", info->frame_num++, (unsigned long)pc);
-	}
-
-	return _URC_NO_REASON;
-}
-
-static void crash_handler(int signum, siginfo_t *info, void *user_context) {
-	static bool in_handler = false;
-	if (in_handler) {
-		_exit(1);
-	}
-	in_handler = true;
-
-	// Write crash file
-	FILE *f = fopen("/data/user/0/com.shipthis.go/files/crashes/crash.txt", "w");
-	if (f) {
-		fprintf(f, "Signal: %d\nStack:\n", signum);
-
-		crash_info cinfo;
-		cinfo.file = f;
-		cinfo.frame_num = 0;
-		cinfo.max_frames = MAX_FRAMES;
-
-		_Unwind_Backtrace(unwind_callback, &cinfo);
-
-		fclose(f);
-	}
-
-	raise(signum);
-}
-
-static void init_crash_handler() {
-	// Setup alternate stack
-	stack_t stack;
-	stack.ss_sp = g_signal_stack;
-	stack.ss_size = sizeof(g_signal_stack);
-	stack.ss_flags = 0;
-	sigaltstack(&stack, nullptr);
-
-	// Create crash directory
-	mkdir(CRASH_DIR, 0755);
-
-	// Install signal handlers
-	struct sigaction sa;
-	sa.sa_sigaction = crash_handler;
-	sigemptyset(&sa.sa_mask);
-	sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
-
-	sigaction(SIGABRT, &sa, nullptr);
-	sigaction(SIGSEGV, &sa, nullptr);
-	sigaction(SIGBUS, &sa, nullptr);
-	sigaction(SIGILL, &sa, nullptr);
-	sigaction(SIGFPE, &sa, nullptr);
-}
-
 String _remove_symlink(const String &dir) {
 	// Workaround for Android 6.0+ using a symlink.
 	// Save the current directory.
@@ -320,15 +182,6 @@ public:
 		// Format the message
 		char buffer[4096];
 		vsnprintf(buffer, sizeof(buffer), p_format, p_list);
-
-		// Update circular buffer
-		strncpy(g_log_history[g_log_index], buffer, sizeof(g_log_history[0]) - 1);
-		g_log_history[g_log_index][sizeof(g_log_history[0]) - 1] = '\0';
-		g_log_index = (g_log_index + 1) % 10;
-		if (g_log_count < 10) g_log_count++;
-
-		// Write file (non-blocking: quick check, single write)
-		write_last10_logs();
 
 		int prio = p_err ? ANDROID_LOG_ERROR : ANDROID_LOG_INFO;
 
@@ -378,9 +231,6 @@ void OS_Android::initialize_core() {
 
 void OS_Android::initialize() {
 	initialize_core();
-	
-	// Initialize crash handler early
-	init_crash_handler();
 }
 
 void OS_Android::initialize_joypads() {
