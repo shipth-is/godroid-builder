@@ -204,7 +204,7 @@ cd "$godotRoot/platform/android/java/"
 if [[ "$godotVersion" == 3.* ]]; then
   echo "==> Renaming AAR for Godot 3.x..."
   mv "$godotRoot/bin/godot-lib.release.aar" "$godotRoot/bin/godot-lib.template_release.aar"
-  mv "$godotRoot/bin/godot-lib.debug.aar" "$godotRoot/bin/godot-lib.template_debug.aar"
+  mv "$godotRoot/bin/godot-lib.dev.aar" "$godotRoot/bin/godot-lib.template_debug.aar"
 fi
 
 echo "==> Done. Built files in:"
