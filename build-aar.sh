@@ -4,22 +4,29 @@ set -euo pipefail
 scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 downloadOnly=false
+repoUrl="https://github.com/godotengine/godot.git"
 
 args=()
-for arg in "$@"; do
-  case "$arg" in
+while [ "$#" -gt 0 ]; do
+  case "$1" in
     --downloadOnly)
       downloadOnly=true
+      shift
+      ;;
+    --repo)
+      repoUrl="$2"
+      shift 2
       ;;
     *)
-      args+=("$arg")
+      args+=("$1")
+      shift
       ;;
   esac
 done
 
 set -- "${args[@]}"
 
-# Usage: ./build-aar.sh <version>  [--downloadOnly]
+# Usage: ./build-aar.sh <version> [--downloadOnly] [--repo <git-url>]
 godotVersion="$1"
 refName="$godotVersion" # e.g. 3.x or
 
@@ -29,9 +36,10 @@ jniSuffix="${pkgSuffix//_/_1}"         # v4_14_11   (JNI: "_" -> "_1")
 rm -rf "$scriptDir/godot-$godotVersion"
 
 echo "Cloning Godot from ref '$refName'..."
+echo "Using repo: $repoUrl"
 
 cd "$scriptDir"
-git clone https://github.com/godotengine/godot.git --depth 1 -b "$refName" "godot-$godotVersion"
+git clone "$repoUrl" --depth 1 -b "$refName" "godot-$godotVersion"
 
 if [ "$downloadOnly" = true ]; then
   echo "Clone completed successfully. Exiting (--downloadOnly set)."
