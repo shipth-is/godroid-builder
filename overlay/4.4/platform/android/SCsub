@@ -107,9 +107,7 @@ if lib_arch_dir != "" and host_subpath != "":
         Move("$TARGET", "$SOURCE"),
     )
 
-    stl_lib_path = (
-        str(env["ANDROID_NDK_ROOT"]) + "/sources/cxx-stl/llvm-libc++/libs/" + lib_arch_dir + "/libc++_shared.so"
-    )
+    stl_lib_path = f"{env['ANDROID_NDK_ROOT']}/toolchains/llvm/prebuilt/{host_subpath}/sysroot/usr/lib/{triple_target_dir}/libc++_shared.so"
     env_android.Command(out_dir + "/libc++_shared.so", stl_lib_path, Copy("$TARGET", "$SOURCE"))
 
     def generate_apk(target, source, env):
