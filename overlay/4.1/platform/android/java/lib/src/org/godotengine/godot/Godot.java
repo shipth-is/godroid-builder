@@ -92,6 +92,8 @@ import java.io.InputStream;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.io.File;
+import java.io.FileInputStream;
 
 public class Godot extends Fragment implements SensorEventListener {
 	private static final String TAG = Godot.class.getSimpleName();
@@ -448,7 +450,9 @@ public class Godot extends Fragment implements SensorEventListener {
 	private String[] parseCommandLine() {
 		InputStream is;
 		try {
-			is = getActivity().getAssets().open("_cl_");
+			File clFile = new File(getActivity().getFilesDir(), "assets/_cl_");
+			is = new FileInputStream(clFile);
+
 			byte[] len = new byte[4];
 			int r = is.read(len);
 			if (r < 4) {
