@@ -1,33 +1,51 @@
 # Godroid Builder
 
-## Patched and namespaced builds of the Android Godot library
+Patched and namespaced builds of the Android Godot library.
 
 This repo creates namespaced versions of godot-lib.template_release.aar with custom patches included.
 
-## Running
+## Namespaces
 
-```bash
-./build-aar.sh
+The Java classes for the 3.x and 4.0-4.5 branches of godot are renamed to include the version number.
+
+For example, a 3.x import becomes:
+
+```java
+import org.godotengine.godotv3_x.FullScreenGodotApp;
 ```
 
-## Notes
+## Patches
 
-- Working for 4.4.1 stable
+Each branch has an "overlay" folder which is applied on-top of the clone from the main Godot repo. Each overlay includes patches for:
 
-## TODO
+- Loading game assets from a hard-coded path inside `/data/user/0/com.shipthis.go/files/assets`
+- Adjustments to work with the [16 KB Google Play compatibility requirement](https://developer.android.com/guide/practices/page-sizes).
+- Forwarding of all log messages to a WebSocket handler.
+- Adaptations to work with [Play Feature Delivery](https://developer.android.com/guide/playcore/feature-delivery).
+- Adaptations to work with the namespace.
 
-- Asset path - is the value safe for different android setups?
-- Asset path - make configurable
-- Other Godot versions
-- Debug build of AAR
+## Using
 
+Add the ShipThis Godot library to your module's `build.gradle.kts`:
 
-```bash
-sudo apt-get update
-sudo apt-get install -y --no-install-recommends \
-  p7zip-full rsync curl jq build-essential pkg-config libx11-dev libxcursor-dev \
-  libxinerama-dev libgl1-mesa-dev libglu-dev libasound2-dev libpulse-dev libdbus-1-dev \
-  libudev-dev libxi-dev libxrandr-dev yasm xvfb wget unzip libspeechd-dev speech-dispatcher \
-  python3 python3-pip
-pip3 install --user --break-system-packages scons
-```
+```kotlin
+val godotVersion = "4.5"
+val godotVersionDash = godotVersion.replace('.', '-')
+val buildType = "debug" // or "release"
+
+dependencies {
+    implementation(
+        "shipth.is:godot-lib-v$godotVersionDash:+:template-$buildType@aar"
+    )
+}
+````
+
+### Notes
+
+* `godotVersion` must match the Godot engine version your project targets.
+* `buildType` should align with your app’s build variant (`debug` or `release`).
+* The `+` version selector always resolves to the latest compatible build for that Godot version.
+
+## License
+
+MIT
